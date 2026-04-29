@@ -1,0 +1,10 @@
+bin/
+obj/
+.vs/
+*.user
+*.suo
+TestResults/
+
+# local secrets and environment files
+*.env
+*.local.json

@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/LeadershipHelper.Application/LeadershipHelper.Application.csproj" />
+    <Project Path="src/LeadershipHelper.Domain/LeadershipHelper.Domain.csproj" />
+    <Project Path="src/LeadershipHelper.Infrastructure/LeadershipHelper.Infrastructure.csproj" />
+    <Project Path="src/LeadershipHelper.Web/LeadershipHelper.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/LeadershipHelper.IntegrationTests/LeadershipHelper.IntegrationTests.csproj" />
+  </Folder>
+</Solution>

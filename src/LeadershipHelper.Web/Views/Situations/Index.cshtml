@@ -1,0 +1,25 @@
+@model IReadOnlyList<LeadershipHelper.Web.Models.Situations.SituationListItemViewModel>
+@{
+    ViewData["Title"] = "Leadership Situations";
+    var query = ViewData["Query"] as string;
+}
+
+<h1>What leadership situation can I help you with?</h1>
+<p>Nothing you do in this app will be shared unless you share it.</p>
+
+<form method="get">
+    <label for="q">Search by title or author</label>
+    <input id="q" name="q" value="@query" />
+    <button type="submit">Search</button>
+</form>
+
+<ul>
+@foreach (var item in Model)
+{
+    <li>
+        <a asp-action="Details" asp-route-id="@item.Id">@item.Title</a>
+        <span>by @item.AuthorName</span>
+        <span>(@item.ActionCount actions)</span>
+    </li>
+}
+</ul>

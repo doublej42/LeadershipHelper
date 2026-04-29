@@ -1,0 +1,143 @@
+using System.Security.Claims;
+using LeadershipHelper.Application.Auth;
+using LeadershipHelper.Domain.Entities;
+using LeadershipHelper.Infrastructure.Persistence;
+using LeadershipHelper.Web.Models.Auth;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+
+namespace LeadershipHelper.Web.Controllers;
+
+[Route("auth")]
+public sealed class AuthController : Controller
+{
+    private readonly AppDbContext _dbContext;
+    private readonly IOtpService _otpService;
+
+    public AuthController(AppDbContext dbContext, IOtpService otpService)
+    {
+        _dbContext = dbContext;
+        _otpService = otpService;
+    }
+
+    [HttpGet("login")]
+    public IActionResult Login() => View();
+
+    [HttpPost("request-code")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RequestCode(RequestOtpInput input, CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+
+        var challenge = _otpService.CreateChallenge();
+        _dbContext.OtpChallenges.Add(new OtpChallenge
+        {
+            Id = challenge.ChallengeId,
+            Contact = input.Contact,
+            Channel = input.Channel,
+            CodeHash = _otpService.HashCode(challenge.Code),
+            ExpiresUtc = DateTimeOffset.UtcNow.AddHours(1),
+            FailedAttempts = 0,
+        });
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        // TODO: Replace with Azure Communication Services integration.
+        return Ok(new
+        {
+            challengeId = challenge.ChallengeId,
+            sampleCode = challenge.Code,
+            note = "Development response only. Remove sampleCode after ACS wiring."
+        });
+    }
+
+    [HttpPost("verify-code")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> VerifyCode(VerifyOtpInput input, CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+
+        var challenge = await _dbContext.OtpChallenges
+            .SingleOrDefaultAsync(x => x.Id == input.ChallengeId, cancellationToken);
+
+        if (challenge is null || challenge.ConsumedUtc is not null || challenge.ExpiresUtc < DateTimeOffset.UtcNow)
+        {
+            return Unauthorized(new { message = "Challenge is invalid or expired." });
+        }
+
+        if (!_otpService.Verify(input.Code, challenge.CodeHash))
+        {
+            challenge.FailedAttempts++;
+            if (challenge.FailedAttempts >= 10)
+            {
+                challenge.ConsumedUtc = DateTimeOffset.UtcNow;
+            }
+
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            return Unauthorized(new { message = "Invalid code." });
+        }
+
+        challenge.ConsumedUtc = DateTimeOffset.UtcNow;
+
+        var user = await _dbContext.Users
+            .FirstOrDefaultAsync(x => x.Email == challenge.Contact || x.PhoneNumber == challenge.Contact, cancellationToken);
+
+        if (user is null)
+        {
+            user = new AppUser
+            {
+                Email = challenge.Channel == "email" ? challenge.Contact : null,
+                PhoneNumber = challenge.Channel == "sms" ? challenge.Contact : null,
+                DisplayName = string.IsNullOrWhiteSpace(input.DisplayName) ? null : input.DisplayName.Trim(),
+            };
+            _dbContext.Users.Add(user);
+        }
+        else if (string.IsNullOrWhiteSpace(user.DisplayName) && !string.IsNullOrWhiteSpace(input.DisplayName))
+        {
+            user.DisplayName = input.DisplayName.Trim();
+        }
+
+        _dbContext.AuthSessions.Add(new AuthSession
+        {
+            UserId = user.Id,
+            ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30),
+        });
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        var claims = new List<Claim>
+        {
+            new(ClaimTypes.NameIdentifier, user.Id.ToString()),
+            new(ClaimTypes.Name, user.DisplayName ?? user.Email ?? user.PhoneNumber ?? "User"),
+        };
+
+        var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme));
+        await HttpContext.SignInAsync(
+            CookieAuthenticationDefaults.AuthenticationScheme,
+            principal,
+            new AuthenticationProperties
+            {
+                IsPersistent = true,
+                ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30),
+                AllowRefresh = true,
+            });
+
+        return RedirectToAction("Index", "Situations");
+    }
+
+    [HttpPost("logout")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Logout()
+    {
+        await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+        return RedirectToAction("Index", "Home");
+    }
+}

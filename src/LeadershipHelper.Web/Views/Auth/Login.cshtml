@@ -1,0 +1,22 @@
+@{
+    ViewData["Title"] = "Login";
+}
+
+<h1>Passwordless Login</h1>
+<p>Use email or phone (sms) to request a one-time code.</p>
+
+<form method="post" action="/auth/request-code">
+    @Html.AntiForgeryToken()
+    <div>
+        <label for="contact">Email or phone</label>
+        <input id="contact" name="Contact" required />
+    </div>
+    <div>
+        <label for="channel">Channel</label>
+        <select id="channel" name="Channel">
+            <option value="email">Email</option>
+            <option value="sms">SMS</option>
+        </select>
+    </div>
+    <button type="submit">Send code</button>
+</form>

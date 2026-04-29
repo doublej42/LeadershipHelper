@@ -1,0 +1,17 @@
+@model LeadershipHelper.Web.Models.Situations.SituationDetailsViewModel
+@{
+    ViewData["Title"] = Model.Title;
+}
+
+<h1>@Model.Title</h1>
+<p>Author: @Model.AuthorName</p>
+
+<h2>Actions</h2>
+<ol>
+@foreach (var action in Model.Actions)
+{
+    <li>@action</li>
+}
+</ol>
+
+<p><a asp-action="Index">Back to list</a></p>
