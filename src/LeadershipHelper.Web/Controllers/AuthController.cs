@@ -15,11 +15,13 @@ public sealed class AuthController : Controller
 {
     private readonly AppDbContext _dbContext;
     private readonly IOtpService _otpService;
+    private readonly IEmailSender _emailSender;
 
-    public AuthController(AppDbContext dbContext, IOtpService otpService)
+    public AuthController(AppDbContext dbContext, IOtpService otpService, IEmailSender emailSender)
     {
         _dbContext = dbContext;
         _otpService = otpService;
+        _emailSender = emailSender;
     }
 
     [HttpGet("login")]
@@ -46,13 +48,9 @@ public sealed class AuthController : Controller
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        // TODO: Replace with Azure Communication Services integration.
-        return Ok(new
-        {
-            challengeId = challenge.ChallengeId,
-            sampleCode = challenge.Code,
-            note = "Development response only. Remove sampleCode after ACS wiring."
-        });
+        await _emailSender.SendOtpAsync(input.Contact, challenge.Code, cancellationToken);
+
+        return Ok(new { challengeId = challenge.ChallengeId });
     }
 
     [HttpPost("verify-code")]
@@ -128,7 +126,7 @@ public sealed class AuthController : Controller
                 AllowRefresh = true,
             });
 
-        return RedirectToAction("Index", "Situations");
+        return Ok(new { redirectUrl = Url.Action("Index", "Situations") });
     }
 
     [HttpPost("logout")]

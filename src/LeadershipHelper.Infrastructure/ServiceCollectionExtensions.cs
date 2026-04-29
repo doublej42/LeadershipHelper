@@ -1,5 +1,6 @@
 using LeadershipHelper.Application.Auth;
 using LeadershipHelper.Application.Seed;
+using LeadershipHelper.Infrastructure.Email;
 using LeadershipHelper.Infrastructure.Persistence;
 using LeadershipHelper.Infrastructure.Seed;
 using Microsoft.EntityFrameworkCore;
@@ -20,6 +21,10 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IOtpService, OtpService>();
         services.AddScoped<ILeadershipSeedParser, LeadershipSeedParser>();
         services.AddScoped<SeedDataService>();
+
+        services.Configure<AzureEmailOptions>(
+            configuration.GetSection(AzureEmailOptions.SectionName));
+        services.AddScoped<IEmailSender, AzureEmailSender>();
 
         return services;
     }

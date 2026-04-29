@@ -2,14 +2,179 @@
     ViewData["Title"] = "Login";
 }
 
-<h1>Passwordless Login</h1>
-<p>Enter your email address to receive a one-time code.</p>
+<div class="row justify-content-center mt-4">
+    <div class="col-md-5">
+        <h1 class="h3 mb-3">Sign in</h1>
 
-<form method="post" action="/auth/request-code">
-    @Html.AntiForgeryToken()
-    <div>
-        <label for="contact">Email address</label>
-        <input id="contact" name="Contact" type="email" required />
+        @* Step 1: request the code *@
+        <div id="step-email">
+            <p class="text-muted">Enter your email address to receive a one-time code.</p>
+            <form id="form-email" novalidate>
+                @Html.AntiForgeryToken()
+                <div class="mb-3">
+                    <label for="contact" class="form-label">Email address</label>
+                    <input id="contact" name="Contact" type="email" class="form-control" required autofocus />
+                    <div class="invalid-feedback" id="email-error"></div>
+                </div>
+                <button type="submit" class="btn btn-primary w-100" id="btn-send">Send code</button>
+            </form>
+        </div>
+
+        @* Step 2: verify the code *@
+        <div id="step-code" class="d-none">
+            <p class="text-muted">A 6-digit code was sent to <strong id="sent-to"></strong>. Enter it below.</p>
+            <div class="alert alert-danger d-none" id="code-error"></div>
+            <form id="form-code" novalidate>
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="ChallengeId" id="challenge-id" />
+                <div class="mb-3">
+                    <label for="code" class="form-label">One-time code</label>
+                    <input id="code" name="Code" type="text" inputmode="numeric" pattern="\d{6}"
+                           maxlength="6" class="form-control form-control-lg text-center tracking-widest"
+                           autocomplete="one-time-code" required autofocus />
+                </div>
+                <div class="mb-3">
+                    <label for="display-name" class="form-label">Your name <span class="text-muted">(optional, first time only)</span></label>
+                    <input id="display-name" name="DisplayName" type="text" class="form-control" maxlength="100" />
+                </div>
+                <button type="submit" class="btn btn-primary w-100" id="btn-verify">Verify &amp; sign in</button>
+                <button type="button" class="btn btn-link w-100 mt-1" id="btn-back">Use a different email</button>
+            </form>
+        </div>
+
+        <div id="step-error" class="d-none">
+            <div class="alert alert-danger" id="error-message"></div>
+            <button type="button" class="btn btn-secondary" id="btn-retry">Try again</button>
+        </div>
     </div>
-    <button type="submit">Send code</button>
-</form>
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    const stepEmail = document.getElementById('step-email');
+    const stepCode  = document.getElementById('step-code');
+    const stepError = document.getElementById('step-error');
+
+    function show(el) {
+        [stepEmail, stepCode, stepError].forEach(e => e.classList.add('d-none'));
+        el.classList.remove('d-none');
+    }
+
+    // Step 1: request code
+    document.getElementById('form-email').addEventListener('submit', async function (e) {
+        e.preventDefault();
+
+        const emailInput = document.getElementById('contact');
+        const email = emailInput.value.trim();
+        const emailError = document.getElementById('email-error');
+        const btn = document.getElementById('btn-send');
+
+        emailInput.classList.remove('is-invalid');
+        emailError.textContent = '';
+
+        if (!emailInput.checkValidity()) {
+            emailInput.classList.add('is-invalid');
+            emailError.textContent = 'Please enter a valid email address.';
+            return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = 'Sending…';
+
+        const token = this.querySelector('input[name="__RequestVerificationToken"]').value;
+
+        try {
+            const resp = await fetch('/auth/request-code', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'RequestVerificationToken': token,
+                },
+                body: new URLSearchParams({ Contact: email }),
+            });
+
+            if (!resp.ok) {
+                const body = await resp.json().catch(() => ({}));
+                throw new Error(body?.title ?? 'Failed to send code. Please try again.');
+            }
+
+            const data = await resp.json();
+            document.getElementById('challenge-id').value = data.challengeId;
+            document.getElementById('sent-to').textContent = email;
+            show(stepCode);
+            document.getElementById('code').focus();
+        } catch (err) {
+            document.getElementById('error-message').textContent = err.message;
+            show(stepError);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Send code';
+        }
+    });
+
+    // Step 2: verify code
+    document.getElementById('form-code').addEventListener('submit', async function (e) {
+        e.preventDefault();
+
+        const codeInput = document.getElementById('code');
+        const codeError = document.getElementById('code-error');
+        const btn = document.getElementById('btn-verify');
+
+        codeError.classList.add('d-none');
+        codeError.textContent = '';
+
+        btn.disabled = true;
+        btn.textContent = 'Verifying…';
+
+        const token = this.querySelector('input[name="__RequestVerificationToken"]').value;
+        const body = new URLSearchParams({
+            ChallengeId: document.getElementById('challenge-id').value,
+            Code: codeInput.value.trim(),
+            DisplayName: document.getElementById('display-name').value.trim(),
+        });
+
+        try {
+            const resp = await fetch('/auth/verify-code', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'RequestVerificationToken': token,
+                },
+                body,
+                redirect: 'follow',
+            });
+
+            // On success the controller returns 200 with a redirectUrl.
+            if (resp.ok) {
+                const data = await resp.json().catch(() => ({}));
+                window.location.href = data.redirectUrl ?? '/situations';
+                return;
+            }
+
+            const data = await resp.json().catch(() => ({}));
+            codeError.textContent = data?.message ?? 'Invalid code. Please try again.';
+            codeError.classList.remove('d-none');
+            codeInput.value = '';
+            codeInput.focus();
+        } catch (err) {
+            document.getElementById('error-message').textContent = err.message;
+            show(stepError);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Verify & sign in';
+        }
+    });
+
+    document.getElementById('btn-back').addEventListener('click', function () {
+        show(stepEmail);
+        document.getElementById('contact').focus();
+    });
+
+    document.getElementById('btn-retry').addEventListener('click', function () {
+        show(stepEmail);
+        document.getElementById('contact').focus();
+    });
+})();
+</script>
+}
