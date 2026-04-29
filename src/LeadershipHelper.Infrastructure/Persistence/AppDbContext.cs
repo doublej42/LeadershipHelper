@@ -24,17 +24,14 @@ public sealed class AppDbContext : DbContext
         {
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Email).HasMaxLength(320);
-            entity.Property(x => x.PhoneNumber).HasMaxLength(32);
             entity.Property(x => x.DisplayName).HasMaxLength(100);
             entity.HasIndex(x => x.Email);
-            entity.HasIndex(x => x.PhoneNumber);
         });
 
         modelBuilder.Entity<OtpChallenge>(entity =>
         {
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Contact).HasMaxLength(320);
-            entity.Property(x => x.Channel).HasMaxLength(20);
             entity.Property(x => x.CodeHash).HasMaxLength(128);
             entity.HasIndex(x => new { x.Contact, x.CreatedUtc });
         });

@@ -39,7 +39,6 @@ public sealed class AuthController : Controller
         {
             Id = challenge.ChallengeId,
             Contact = input.Contact,
-            Channel = input.Channel,
             CodeHash = _otpService.HashCode(challenge.Code),
             ExpiresUtc = DateTimeOffset.UtcNow.AddHours(1),
             FailedAttempts = 0,
@@ -88,14 +87,13 @@ public sealed class AuthController : Controller
         challenge.ConsumedUtc = DateTimeOffset.UtcNow;
 
         var user = await _dbContext.Users
-            .FirstOrDefaultAsync(x => x.Email == challenge.Contact || x.PhoneNumber == challenge.Contact, cancellationToken);
+            .FirstOrDefaultAsync(x => x.Email == challenge.Contact, cancellationToken);
 
         if (user is null)
         {
             user = new AppUser
             {
-                Email = challenge.Channel == "email" ? challenge.Contact : null,
-                PhoneNumber = challenge.Channel == "sms" ? challenge.Contact : null,
+                Email = challenge.Contact,
                 DisplayName = string.IsNullOrWhiteSpace(input.DisplayName) ? null : input.DisplayName.Trim(),
             };
             _dbContext.Users.Add(user);
@@ -116,7 +114,7 @@ public sealed class AuthController : Controller
         var claims = new List<Claim>
         {
             new(ClaimTypes.NameIdentifier, user.Id.ToString()),
-            new(ClaimTypes.Name, user.DisplayName ?? user.Email ?? user.PhoneNumber ?? "User"),
+            new(ClaimTypes.Name, user.DisplayName ?? user.Email ?? "User"),
         };
 
         var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme));
