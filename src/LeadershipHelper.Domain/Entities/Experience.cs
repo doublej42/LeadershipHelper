@@ -6,6 +6,7 @@ public sealed class Experience
     public Guid UserId { get; set; }
     public Guid SituationId { get; set; }
     public DateTimeOffset ExperienceDateUtc { get; set; } = DateTimeOffset.UtcNow;
+    public string? UserContext { get; set; }
     public string? DetailsMarkdown { get; set; }
     public bool? DidHelp { get; set; }
     public DateTimeOffset UpdatedUtc { get; set; } = DateTimeOffset.UtcNow;

@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using LeadershipHelper.Domain.Entities;
 using LeadershipHelper.Infrastructure.Persistence;
 using LeadershipHelper.Web.Models.Situations;
 using Microsoft.AspNetCore.Authorization;
@@ -13,6 +15,12 @@ public sealed class SituationsController : Controller
     public SituationsController(AppDbContext dbContext)
     {
         _dbContext = dbContext;
+    }
+
+    private Guid? TryGetUserId()
+    {
+        var value = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return value is not null ? Guid.Parse(value) : null;
     }
 
     [AllowAnonymous]
@@ -66,6 +74,65 @@ public sealed class SituationsController : Controller
             return NotFound();
         }
 
+        var userId = TryGetUserId();
+        if (userId is not null)
+        {
+            var isSaved = await _dbContext.SavedSituations
+                .AnyAsync(x => x.UserId == userId && x.SituationId == id, cancellationToken);
+
+            var activeExperienceId = await _dbContext.Experiences
+                .Where(x => x.UserId == userId && x.SituationId == id && x.DidHelp == null)
+                .OrderByDescending(x => x.ExperienceDateUtc)
+                .Select(x => (Guid?)x.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            item = item with { IsSaved = isSaved, ActiveExperienceId = activeExperienceId };
+        }
+
         return View(item);
+    }
+
+    // POST /situations/save
+    [Authorize]
+    [HttpPost("situations/save")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Save(Guid situationId, CancellationToken cancellationToken)
+    {
+        var userId = TryGetUserId()!.Value;
+
+        var exists = await _dbContext.SavedSituations
+            .AnyAsync(x => x.UserId == userId && x.SituationId == situationId, cancellationToken);
+
+        if (!exists)
+        {
+            _dbContext.SavedSituations.Add(new SavedSituation
+            {
+                UserId = userId,
+                SituationId = situationId,
+            });
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        return RedirectToAction(nameof(Details), new { id = situationId });
+    }
+
+    // POST /situations/unsave
+    [Authorize]
+    [HttpPost("situations/unsave")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Unsave(Guid situationId, CancellationToken cancellationToken)
+    {
+        var userId = TryGetUserId()!.Value;
+
+        var saved = await _dbContext.SavedSituations
+            .SingleOrDefaultAsync(x => x.UserId == userId && x.SituationId == situationId, cancellationToken);
+
+        if (saved is not null)
+        {
+            _dbContext.SavedSituations.Remove(saved);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        return RedirectToAction(nameof(Details), new { id = situationId });
     }
 }

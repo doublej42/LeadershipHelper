@@ -1,0 +1,141 @@
+@model LeadershipHelper.Web.Models.Experiences.ExperienceViewModel
+@{
+    ViewData["Title"] = Model.SituationTitle;
+}
+
+<div class="mb-4">
+    <a asp-action="Index" class="text-muted small">&larr; My experiences</a>
+    <h1 class="h3 mt-2">@Model.SituationTitle</h1>
+    <p class="text-muted">@Model.ExperienceDateUtc.ToLocalTime().ToString("MMM d, yyyy")</p>
+</div>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <label class="form-label fw-semibold" for="user-context">Describe the situation you are having</label>
+        <textarea id="user-context" class="form-control" rows="3"
+                  placeholder="What's going on? Give a brief description of your specific situation&hellip;">@Model.UserContext</textarea>
+        <div class="form-text">This is saved automatically as you type.</div>
+    </div>
+</div>
+
+<div class="list-group mb-4" id="action-list">
+@foreach (var state in Model.ActionStates)
+{
+    <div class="list-group-item py-3" id="state-@state.StateId" data-state-id="@state.StateId">
+        <div class="d-flex justify-content-between align-items-start">
+            <div class="me-3 flex-grow-1">
+                <p class="mb-1">@state.PromptMarkdown</p>
+                @if (state.RequiresTextResponse)
+                {
+                    <textarea class="form-control form-control-sm mt-2 response-text"
+                              rows="2" placeholder="Your response&hellip;"
+                              data-state-id="@state.StateId">@state.ResponseText</textarea>
+                }
+            </div>
+            <div class="form-check form-switch ms-2 flex-shrink-0">
+                <input class="form-check-input done-toggle" type="checkbox" role="switch"
+                       id="done-@state.StateId" data-state-id="@state.StateId"
+                       @(state.IsDone ? "checked" : "") />
+                <label class="form-check-label visually-hidden" for="done-@state.StateId">Done</label>
+            </div>
+        </div>
+    </div>
+}
+</div>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <h5 class="card-title">Wrap up</h5>
+        <form method="post" asp-action="Complete">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="ExperienceId" value="@Model.Id" />
+            <input type="hidden" name="UserContext" id="user-context-hidden" value="@Model.UserContext" />
+            <div class="mb-3">
+                <label class="form-label">What was your concrete next step or key insight?</label>
+                <textarea class="form-control" name="DetailsMarkdown" rows="4" placeholder="Optional notes&hellip;">@Model.DetailsMarkdown</textarea>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Did this situation help you?</label>
+                <div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="DidHelp" id="helped-yes" value="true"
+                               @(Model.DidHelp == true ? "checked" : "") />
+                        <label class="form-check-label" for="helped-yes">Yes</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="DidHelp" id="helped-no" value="false"
+                               @(Model.DidHelp == false ? "checked" : "") />
+                        <label class="form-check-label" for="helped-no">No</label>
+                    </div>
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary">Save &amp; finish</button>
+            <a asp-action="Index" class="btn btn-link ms-2">Back to my experiences</a>
+        </form>
+    </div>
+</div>
+
+<form method="post" asp-action="Delete" asp-route-id="@Model.Id" class="d-inline"
+      onsubmit="return confirm('Delete this experience? This cannot be undone.')">
+    @Html.AntiForgeryToken()
+    <button type="submit" class="btn btn-outline-danger btn-sm">Delete experience</button>
+</form>
+
+@section Scripts {
+<script>
+(function () {
+    const token = document.querySelector('input[name="__RequestVerificationToken"]').value;
+
+    async function saveState(stateId) {
+        const row = document.getElementById('state-' + stateId);
+        const isDone = row.querySelector('.done-toggle').checked;
+        const textEl = row.querySelector('.response-text');
+        const responseText = textEl ? textEl.value : '';
+
+        await fetch('/experiences/update-action', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'RequestVerificationToken': token,
+            },
+            body: new URLSearchParams({ StateId: stateId, IsDone: isDone, ResponseText: responseText }),
+        });
+    }
+
+    document.querySelectorAll('.done-toggle').forEach(toggle => {
+        toggle.addEventListener('change', () => saveState(toggle.dataset.stateId));
+    });
+
+    let debounceTimers = {};
+    document.querySelectorAll('.response-text').forEach(textarea => {
+        textarea.addEventListener('input', () => {
+            const id = textarea.dataset.stateId;
+            clearTimeout(debounceTimers[id]);
+            debounceTimers[id] = setTimeout(() => saveState(id), 800);
+        });
+    });
+
+    // Auto-save user context description
+    const userContextEl = document.getElementById('user-context');
+    const userContextHidden = document.getElementById('user-context-hidden');
+    let contextTimer;
+    userContextEl.addEventListener('input', () => {
+        userContextHidden.value = userContextEl.value;
+        clearTimeout(contextTimer);
+        contextTimer = setTimeout(async () => {
+            await fetch('/experiences/update-context', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'RequestVerificationToken': token,
+                },
+                body: new URLSearchParams({
+                    ExperienceId: '@Model.Id',
+                    UserContext: userContextEl.value,
+                }),
+            });
+        }, 800);
+    });
+})();
+</script>
+}

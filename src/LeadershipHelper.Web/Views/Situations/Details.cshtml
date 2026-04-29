@@ -3,15 +3,58 @@
     ViewData["Title"] = Model.Title;
 }
 
-<h1>@Model.Title</h1>
-<p>Author: @Model.AuthorName</p>
+<div class="mb-4">
+    <a asp-action="Index" class="text-muted small">&larr; Back to situations</a>
+    <h1 class="h3 mt-2">@Model.Title</h1>
+    <p class="text-muted">by @Model.AuthorName</p>
+</div>
 
-<h2>Actions</h2>
-<ol>
-@foreach (var action in Model.Actions)
+<div class="list-group mb-4">
+@for (int i = 0; i < Model.Actions.Count; i++)
 {
-    <li>@action</li>
+    <div class="list-group-item d-flex justify-content-between align-items-start py-3">
+        <div class="me-auto">@Model.Actions[i]</div>
+        <span class="badge bg-secondary rounded-pill ms-2 align-self-center">@(i + 1)</span>
+    </div>
 }
-</ol>
+</div>
 
-<p><a asp-action="Index">Back to list</a></p>
+@if (User.Identity?.IsAuthenticated == true)
+{
+    <div class="d-flex gap-2 flex-wrap mb-3">
+        @if (Model.ActiveExperienceId.HasValue)
+        {
+            <a asp-controller="Experiences" asp-action="Work" asp-route-id="@Model.ActiveExperienceId"
+               class="btn btn-primary">Continue experience</a>
+        }
+        else
+        {
+            <form method="post" asp-controller="Experiences" asp-action="Start">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="situationId" value="@Model.Id" />
+                <button type="submit" class="btn btn-primary">Start experience</button>
+            </form>
+        }
+
+        @if (Model.IsSaved)
+        {
+            <form method="post" asp-action="Unsave">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="situationId" value="@Model.Id" />
+                <button type="submit" class="btn btn-outline-secondary">&#9733; Saved</button>
+            </form>
+        }
+        else
+        {
+            <form method="post" asp-action="Save">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="situationId" value="@Model.Id" />
+                <button type="submit" class="btn btn-outline-secondary">&#9734; Save for later</button>
+            </form>
+        }
+    </div>
+}
+else
+{
+    <p class="text-muted"><a asp-controller="Auth" asp-action="Login">Sign in</a> to start an experience or save this situation.</p>
+}

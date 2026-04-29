@@ -1,0 +1,40 @@
+@model LeadershipHelper.Web.Models.Experiences.MyExperiencesViewModel
+@{
+    ViewData["Title"] = "My Experiences";
+}
+
+<div class="mb-4">
+    <h1 class="h3">My Experiences</h1>
+    <p class="text-muted">Situations you&rsquo;ve worked through.</p>
+</div>
+
+@if (!Model.Experiences.Any())
+{
+    <p class="text-muted">You haven&rsquo;t started any experiences yet. <a asp-controller="Situations" asp-action="Index">Browse situations</a> to get started.</p>
+}
+else
+{
+    <div class="list-group">
+    @foreach (var exp in Model.Experiences)
+    {
+        <a asp-action="Work" asp-route-id="@exp.Id"
+           class="list-group-item list-group-item-action d-flex justify-content-between align-items-start py-3">
+            <div class="me-auto">
+                <div class="fw-semibold">@exp.SituationTitle</div>
+                @if (!string.IsNullOrWhiteSpace(exp.UserContext))
+                {
+                    <div class="text-secondary small mt-1">@exp.UserContext</div>
+                }
+                <small class="text-muted">@exp.ExperienceDateUtc.ToLocalTime().ToString("MMM d, yyyy")</small>
+                @if (exp.DidHelp.HasValue)
+                {
+                    <span class="ms-2 badge @(exp.DidHelp.Value ? "bg-success" : "bg-warning text-dark")">
+                        @(exp.DidHelp.Value ? "Helped" : "Didn't help")
+                    </span>
+                }
+            </div>
+            <span class="badge bg-primary rounded-pill ms-2 align-self-center">@exp.DoneCount / @exp.TotalCount done</span>
+        </a>
+    }
+    </div>
+}

@@ -2,8 +2,48 @@
     ViewData["Title"] = "Leadership Helper";
 }
 
-<div class="text-center">
-    <h1 class="display-4">Leadership Helper</h1>
-    <p>Pick a situation, work through prompts, and capture one concrete next step.</p>
-    <p><a asp-controller="Situations" asp-action="Index">Browse leadership situations</a></p>
+<div class="text-center mb-5 mt-3">
+    <h1 class="display-5 fw-bold">Leadership Helper</h1>
+    <p class="lead text-muted">Pick a situation, work through prompts, and capture one concrete next step.</p>
+</div>
+
+<div class="list-group">
+    <a asp-controller="Situations" asp-action="Index"
+       class="list-group-item list-group-item-action d-flex justify-content-between align-items-start py-3">
+        <div class="me-auto">
+            <div class="fw-semibold">Browse situations</div>
+            <small class="text-muted">Find a leadership scenario that matches what you&rsquo;re facing</small>
+        </div>
+        <span class="badge bg-primary rounded-pill ms-2 align-self-center">&rsaquo;</span>
+    </a>
+    @if (User.Identity?.IsAuthenticated == true)
+    {
+        <a asp-controller="Experiences" asp-action="Index"
+           class="list-group-item list-group-item-action d-flex justify-content-between align-items-start py-3">
+            <div class="me-auto">
+                <div class="fw-semibold">My experiences</div>
+                <small class="text-muted">Review past situations you&rsquo;ve worked through</small>
+            </div>
+            <span class="badge bg-primary rounded-pill ms-2 align-self-center">&rsaquo;</span>
+        </a>
+        <a href="#"
+           class="list-group-item list-group-item-action d-flex justify-content-between align-items-start py-3 disabled">
+            <div class="me-auto">
+                <div class="fw-semibold">Saved situations</div>
+                <small class="text-muted">Situations you&rsquo;ve bookmarked for later</small>
+            </div>
+            <span class="badge bg-secondary rounded-pill ms-2 align-self-center">coming soon</span>
+        </a>
+    }
+    else
+    {
+        <a asp-controller="Auth" asp-action="Login"
+           class="list-group-item list-group-item-action d-flex justify-content-between align-items-start py-3">
+            <div class="me-auto">
+                <div class="fw-semibold">Sign in</div>
+                <small class="text-muted">Save your progress and track your experiences</small>
+            </div>
+            <span class="badge bg-success rounded-pill ms-2 align-self-center">&rsaquo;</span>
+        </a>
+    }
 </div>
