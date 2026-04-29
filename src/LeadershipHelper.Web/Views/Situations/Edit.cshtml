@@ -1,0 +1,125 @@
+@model LeadershipHelper.Web.Models.Situations.SituationInputModel
+@{
+    var situationId = (Guid)ViewData["SituationId"]!;
+    ViewData["Title"] = "Edit situation";
+}
+
+<div class="mb-4">
+    <a asp-action="Details" asp-route-id="@situationId" class="text-muted small">&larr; Back to situation</a>
+    <h1 class="h3 mt-2">Edit situation</h1>
+</div>
+
+<form method="post" asp-action="Edit" asp-route-id="@situationId">
+    @Html.AntiForgeryToken()
+
+    <div asp-validation-summary="ModelOnly" class="alert alert-danger d-none" id="val-summary"></div>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <div class="mb-3">
+                <label asp-for="Title" class="form-label fw-semibold">Title</label>
+                <input asp-for="Title" class="form-control" />
+                <span asp-validation-for="Title" class="text-danger small"></span>
+            </div>
+            <div class="mb-3">
+                <label asp-for="ShortDescription" class="form-label fw-semibold">Short description</label>
+                <textarea asp-for="ShortDescription" class="form-control" rows="2"></textarea>
+                <span asp-validation-for="ShortDescription" class="text-danger small"></span>
+            </div>
+            <div class="mb-0">
+                <label asp-for="AuthorName" class="form-label fw-semibold">Author name <span class="text-muted fw-normal">(optional)</span></label>
+                <input asp-for="AuthorName" class="form-control" />
+            </div>
+        </div>
+    </div>
+
+    <h5 class="fw-semibold mb-2">Prompts / actions</h5>
+    <p class="text-muted small mb-3">Edit existing prompts, remove them with ✕, or add new ones at the bottom.</p>
+
+    <div id="actions-list" class="list-group mb-3">
+        @for (int i = 0; i < Model.Actions.Count; i++)
+        {
+            var a = Model.Actions[i];
+            <div class="list-group-item py-3 action-row">
+                @if (a.Id.HasValue)
+                {
+                    <input type="hidden" name="Actions[@i].Id" value="@a.Id" />
+                }
+                <div class="d-flex align-items-start gap-2">
+                    <span class="badge bg-secondary rounded-pill mt-2 step-badge">@(i + 1)</span>
+                    <div class="flex-grow-1">
+                        <textarea name="Actions[@i].PromptMarkdown" class="form-control mb-2"
+                                  rows="2">@a.PromptMarkdown</textarea>
+                        <div class="form-check">
+                            <input type="checkbox" name="Actions[@i].RequiresTextResponse" value="true"
+                                   class="form-check-input" id="req-@i"
+                                   @(a.RequiresTextResponse ? "checked" : "") />
+                            <input type="hidden" name="Actions[@i].RequiresTextResponse" value="false" />
+                            <label class="form-check-label small" for="req-@i">Requires written response</label>
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-danger mt-1 remove-action">&#x2715;</button>
+                </div>
+            </div>
+        }
+    </div>
+
+    <button type="button" class="btn btn-outline-secondary btn-sm mb-4" id="add-action">+ Add prompt</button>
+
+    <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary">Save changes</button>
+        <a asp-action="Details" asp-route-id="@situationId" class="btn btn-outline-secondary">Cancel</a>
+    </div>
+</form>
+
+@section Scripts {
+<script>
+    const list = document.getElementById('actions-list');
+
+    function renumber() {
+        const rows = list.querySelectorAll('.action-row');
+        rows.forEach((row, i) => {
+            row.querySelector('.step-badge').textContent = i + 1;
+            const idInput = row.querySelector('input[type=hidden][name$=".Id"]');
+            if (idInput) idInput.name = `Actions[${i}].Id`;
+            row.querySelector('textarea').name = `Actions[${i}].PromptMarkdown`;
+            row.querySelectorAll('input[type=checkbox]').forEach(cb => cb.name = `Actions[${i}].RequiresTextResponse`);
+            row.querySelectorAll('input[type=hidden][name$=".RequiresTextResponse"]').forEach(h => h.name = `Actions[${i}].RequiresTextResponse`);
+            const lbl = row.querySelector('label');
+            if (lbl) { lbl.htmlFor = `req-${i}`; row.querySelector('input[type=checkbox]').id = `req-${i}`; }
+        });
+    }
+
+    document.getElementById('add-action').addEventListener('click', () => {
+        const i = list.querySelectorAll('.action-row').length;
+        const div = document.createElement('div');
+        div.className = 'list-group-item py-3 action-row';
+        div.innerHTML = `
+            <div class="d-flex align-items-start gap-2">
+                <span class="badge bg-secondary rounded-pill mt-2 step-badge">${i + 1}</span>
+                <div class="flex-grow-1">
+                    <textarea name="Actions[${i}].PromptMarkdown" class="form-control mb-2" rows="2" placeholder="e.g. What have you already tried?"></textarea>
+                    <div class="form-check">
+                        <input type="checkbox" name="Actions[${i}].RequiresTextResponse" value="true" class="form-check-input" id="req-${i}" />
+                        <input type="hidden" name="Actions[${i}].RequiresTextResponse" value="false" />
+                        <label class="form-check-label small" for="req-${i}">Requires written response</label>
+                    </div>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-danger mt-1 remove-action">&#x2715;</button>
+            </div>`;
+        list.appendChild(div);
+        div.querySelector('textarea').focus();
+        renumber();
+    });
+
+    list.addEventListener('click', e => {
+        if (e.target.closest('.remove-action')) {
+            e.target.closest('.action-row').remove();
+            renumber();
+        }
+    });
+
+    const vs = document.getElementById('val-summary');
+    if (vs && vs.querySelectorAll('li').length) vs.classList.remove('d-none');
+</script>
+}
