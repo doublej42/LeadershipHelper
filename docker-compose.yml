@@ -1,7 +1,7 @@
 services:
 
   db:
-    image: mcr.microsoft.com/mssql/server:2022-latest
+    image: mcr.microsoft.com/mssql/server:2025-latest
     environment:
       ACCEPT_EULA: "Y"
       MSSQL_SA_PASSWORD: "${DB_SA_PASSWORD}"
