@@ -1,0 +1,18 @@
+## Dependency/build artefacts
+**/bin/
+**/obj/
+
+## User secrets (local dev only)
+**/.microsoft/usersecrets/
+
+## .env file with real secrets
+.env
+
+## Git
+.git
+.gitignore
+
+## IDE
+.vs/
+.vscode/
+*.user

@@ -1,0 +1,38 @@
+services:
+
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "${DB_SA_PASSWORD}"
+    volumes:
+      - sqldata:/var/opt/mssql
+    healthcheck:
+      test: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "${DB_SA_PASSWORD}" -Q "SELECT 1" -C -b
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ConnectionStrings__Default: >-
+        Server=db;Database=LeadershipHelper;User Id=sa;Password=${DB_SA_PASSWORD};
+        Encrypt=True;TrustServerCertificate=True
+      Acs__ConnectionString: "${ACS_CONNECTION_STRING}"
+      Acs__EmailFrom: "${ACS_EMAIL_FROM}"
+      Auth__OtpLength: "6"
+      Auth__OtpTtlMinutes: "60"
+      Auth__OtpMaxAttempts: "10"
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    restart: unless-stopped
+
+volumes:
+  sqldata:
