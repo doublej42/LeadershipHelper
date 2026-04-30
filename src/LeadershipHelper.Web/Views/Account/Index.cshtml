@@ -1,0 +1,35 @@
+@{
+    ViewData["Title"] = "My Account";
+    var displayName = ViewData["DisplayName"] as string ?? string.Empty;
+    var email = ViewData["Email"] as string ?? string.Empty;
+}
+
+<div class="mb-4">
+    <h1 class="h3">My Account</h1>
+    <p class="text-muted">@email</p>
+</div>
+
+@if (TempData["Success"] is string msg)
+{
+    <div class="alert alert-success">@msg</div>
+}
+
+<div class="card" style="max-width: 480px;">
+    <div class="card-body">
+        <h5 class="card-title mb-3">Display name</h5>
+        <p class="text-muted small">This name appears as the author when you create situations.</p>
+        <form method="post" asp-action="UpdateName">
+            @Html.AntiForgeryToken()
+            <div class="mb-3">
+                <input type="text" name="displayName" value="@displayName"
+                       class="form-control @(ViewData.ModelState["displayName"]?.Errors.Any() == true ? "is-invalid" : "")"
+                       placeholder="Your name" maxlength="100" required />
+                @if (ViewData.ModelState["displayName"]?.Errors.FirstOrDefault() is { } err)
+                {
+                    <div class="invalid-feedback">@err.ErrorMessage</div>
+                }
+            </div>
+            <button type="submit" class="btn btn-primary">Save</button>
+        </form>
+    </div>
+</div>

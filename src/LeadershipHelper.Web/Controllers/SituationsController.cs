@@ -86,7 +86,19 @@ public sealed class SituationsController : Controller
                 .Select(x => (Guid?)x.Id)
                 .FirstOrDefaultAsync(cancellationToken);
 
-            item = item with { IsSaved = isSaved, ActiveExperienceId = activeExperienceId };
+            var creatorId = await _dbContext.Situations
+                .Where(x => x.Id == id)
+                .Select(x => x.CreatorUserId)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            var isOwner = creatorId.HasValue && creatorId.Value == userId.Value;
+            item = item with
+            {
+                IsSaved = isSaved,
+                ActiveExperienceId = activeExperienceId,
+                CanEdit = isOwner,
+                CanAddPrompts = !isOwner,
+            };
         }
 
         return View(item);
@@ -172,12 +184,41 @@ public sealed class SituationsController : Controller
         return View(ordered);
     }
 
+    // GET /situations/mine
+    [Authorize]
+    [HttpGet("situations/mine")]
+    public async Task<IActionResult> Mine(CancellationToken cancellationToken)
+    {
+        var userId = TryGetUserId()!.Value;
+
+        var items = await _dbContext.Situations
+            .AsNoTracking()
+            .Where(x => x.CreatorUserId == userId)
+            .OrderByDescending(x => x.CreatedUtc)
+            .Select(x => new SituationListItemViewModel
+            {
+                Id = x.Id,
+                Title = x.Title,
+                AuthorName = x.AuthorName ?? "Unknown",
+                ActionCount = x.Actions.Count,
+            })
+            .ToListAsync(cancellationToken);
+
+        return View(items);
+    }
+
     // GET /situations/create
     [Authorize]
     [HttpGet("situations/create")]
     public IActionResult Create()
     {
-        var model = new SituationInputModel();
+        var userId = TryGetUserId()!.Value;
+        var displayName = _dbContext.Users
+            .Where(x => x.Id == userId)
+            .Select(x => x.DisplayName)
+            .FirstOrDefault();
+
+        var model = new SituationInputModel { AuthorName = displayName };
         model.Actions.Add(new ActionInputModel { SortOrder = 1 });
         return View(model);
     }
@@ -191,12 +232,14 @@ public sealed class SituationsController : Controller
         if (!ModelState.IsValid)
             return View(input);
 
+        var userId = TryGetUserId()!.Value;
         var situation = new Situation
         {
             Title = input.Title.Trim(),
             ShortDescription = input.ShortDescription.Trim(),
             AuthorName = string.IsNullOrWhiteSpace(input.AuthorName) ? null : input.AuthorName.Trim(),
-            IsCommunity = true,
+            IsCommunity = input.IsCommunity,
+            CreatorUserId = userId,
         };
 
         int order = 1;
@@ -228,11 +271,15 @@ public sealed class SituationsController : Controller
 
         if (situation is null) return NotFound();
 
+        var userId = TryGetUserId()!.Value;
+        var isOwner = situation.CreatorUserId.HasValue && situation.CreatorUserId.Value == userId;
+
         var model = new SituationInputModel
         {
-            Title = situation.Title,
-            ShortDescription = situation.ShortDescription,
-            AuthorName = situation.AuthorName,
+            Title = isOwner ? situation.Title : string.Empty,
+            ShortDescription = isOwner ? situation.ShortDescription : string.Empty,
+            AuthorName = isOwner ? situation.AuthorName : null,
+            IsCommunity = situation.IsCommunity,
             Actions = situation.Actions
                 .OrderBy(a => a.SortOrder)
                 .Select(a => new ActionInputModel
@@ -246,6 +293,8 @@ public sealed class SituationsController : Controller
         };
 
         ViewData["SituationId"] = id;
+        ViewData["IsOwner"] = isOwner;
+        ViewData["SituationTitle"] = situation.Title;
         return View(model);
     }
 
@@ -255,11 +304,7 @@ public sealed class SituationsController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Edit(Guid id, SituationInputModel input, CancellationToken cancellationToken)
     {
-        if (!ModelState.IsValid)
-        {
-            ViewData["SituationId"] = id;
-            return View(input);
-        }
+        var userId = TryGetUserId()!.Value;
 
         var situation = await _dbContext.Situations
             .Include(x => x.Actions)
@@ -267,34 +312,56 @@ public sealed class SituationsController : Controller
 
         if (situation is null) return NotFound();
 
-        situation.Title = input.Title.Trim();
-        situation.ShortDescription = input.ShortDescription.Trim();
-        situation.AuthorName = string.IsNullOrWhiteSpace(input.AuthorName) ? null : input.AuthorName.Trim();
+        var isOwner = situation.CreatorUserId.HasValue && situation.CreatorUserId.Value == userId;
+
+        if (!isOwner && !ModelState.IsValid)
+        {
+            // For non-owners only validate new prompts; strip other errors
+            ModelState.Clear();
+        }
+
+        if (isOwner)
+        {
+            if (!ModelState.IsValid)
+            {
+                ViewData["SituationId"] = id;
+                ViewData["IsOwner"] = true;
+                ViewData["SituationTitle"] = situation.Title;
+                return View(input);
+            }
+            situation.Title = input.Title.Trim();
+            situation.ShortDescription = input.ShortDescription.Trim();
+            situation.AuthorName = string.IsNullOrWhiteSpace(input.AuthorName) ? null : input.AuthorName.Trim();
+            situation.IsCommunity = input.IsCommunity;
+        }
 
         var submittedActions = input.Actions
             .Where(a => !string.IsNullOrWhiteSpace(a.PromptMarkdown))
             .ToList();
 
-        // Remove actions not present in submission
-        var submittedIds = submittedActions.Where(a => a.Id.HasValue).Select(a => a.Id!.Value).ToHashSet();
-        var toRemove = situation.Actions.Where(a => !submittedIds.Contains(a.Id)).ToList();
-        foreach (var r in toRemove)
-            _dbContext.SituationActions.Remove(r);
+        if (isOwner)
+        {
+            // Remove actions not present in submission
+            var submittedIds = submittedActions.Where(a => a.Id.HasValue).Select(a => a.Id!.Value).ToHashSet();
+            var toRemove = situation.Actions.Where(a => !submittedIds.Contains(a.Id)).ToList();
+            foreach (var r in toRemove)
+                _dbContext.SituationActions.Remove(r);
+        }
 
-        int order = 1;
+        int order = situation.Actions.Count > 0 ? situation.Actions.Max(a => a.SortOrder) + 1 : 1;
         foreach (var a in submittedActions)
         {
-            if (a.Id.HasValue)
+            if (isOwner && a.Id.HasValue)
             {
                 var existing = situation.Actions.SingleOrDefault(x => x.Id == a.Id.Value);
                 if (existing is not null)
                 {
                     existing.PromptMarkdown = a.PromptMarkdown.Trim();
                     existing.RequiresTextResponse = a.RequiresTextResponse;
-                    existing.SortOrder = order;
+                    existing.SortOrder = a.SortOrder;
                 }
             }
-            else
+            else if (!a.Id.HasValue)
             {
                 situation.Actions.Add(new SituationAction
                 {
@@ -302,8 +369,8 @@ public sealed class SituationsController : Controller
                     RequiresTextResponse = a.RequiresTextResponse,
                     SortOrder = order,
                 });
+                order++;
             }
-            order++;
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);

@@ -30,6 +30,13 @@
                 <label asp-for="AuthorName" class="form-label fw-semibold">Author name <span class="text-muted fw-normal">(optional)</span></label>
                 <input asp-for="AuthorName" class="form-control" placeholder="Your name or leave blank" />
             </div>
+            <div class="mt-3 pt-3 border-top">
+                <div class="form-check">
+                    <input asp-for="IsCommunity" class="form-check-input" type="checkbox" />
+                    <label asp-for="IsCommunity" class="form-check-label fw-semibold">Share with community</label>
+                    <div class="form-text">If checked, this situation will appear in the public browse list.</div>
+                </div>
+            </div>
         </div>
     </div>
 

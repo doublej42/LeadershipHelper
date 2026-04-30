@@ -7,6 +7,7 @@ public sealed class Situation
     public string ShortDescription { get; set; } = string.Empty;
     public string? AuthorName { get; set; }
     public bool IsCommunity { get; set; }
+    public Guid? CreatorUserId { get; set; }
     public DateTimeOffset CreatedUtc { get; set; } = DateTimeOffset.UtcNow;
 
     public ICollection<SituationAction> Actions { get; set; } = new List<SituationAction>();

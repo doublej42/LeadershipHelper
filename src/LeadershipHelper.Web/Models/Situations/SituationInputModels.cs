@@ -13,6 +13,8 @@ public sealed class SituationInputModel
     [MaxLength(100)]
     public string? AuthorName { get; set; }
 
+    public bool IsCommunity { get; set; }
+
     public List<ActionInputModel> Actions { get; set; } = new();
 }
 

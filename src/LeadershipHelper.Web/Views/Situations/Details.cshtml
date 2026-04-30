@@ -22,7 +22,14 @@
 @if (User.Identity?.IsAuthenticated == true)
 {
     <div class="d-flex gap-2 flex-wrap mb-3">
-        <a asp-action="Edit" asp-route-id="@Model.Id" class="btn btn-outline-secondary btn-sm">&#9998; Edit situation</a>
+        @if (Model.CanEdit)
+        {
+            <a asp-action="Edit" asp-route-id="@Model.Id" class="btn btn-outline-secondary btn-sm">&#9998; Edit situation</a>
+        }
+        else if (Model.CanAddPrompts)
+        {
+            <a asp-action="Edit" asp-route-id="@Model.Id" class="btn btn-outline-secondary btn-sm">+ Add prompts</a>
+        }
         @if (Model.ActiveExperienceId.HasValue)
         {
             <a asp-controller="Experiences" asp-action="Work" asp-route-id="@Model.ActiveExperienceId"

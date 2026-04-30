@@ -1,0 +1,40 @@
+@model IReadOnlyList<LeadershipHelper.Web.Models.Situations.SituationListItemViewModel>
+@{
+    ViewData["Title"] = "My situations";
+}
+
+<div class="mb-4 d-flex justify-content-between align-items-start flex-wrap gap-2">
+    <div>
+        <a asp-action="Index" class="text-muted small">&larr; Browse all situations</a>
+        <h1 class="h3 mt-2">My situations</h1>
+        <p class="text-muted mb-0">Situations you created. Use Edit to update each one.</p>
+    </div>
+    <a asp-action="Create" class="btn btn-primary btn-sm">+ New situation</a>
+</div>
+
+@if (Model.Count == 0)
+{
+    <div class="text-center text-muted py-5">
+        <p class="mb-2">You have not created any situations yet.</p>
+        <a asp-action="Create" class="btn btn-outline-primary btn-sm">Create your first situation</a>
+    </div>
+}
+else
+{
+    <div class="list-group">
+        @foreach (var item in Model)
+        {
+            <div class="list-group-item d-flex justify-content-between align-items-start py-3">
+                <div class="me-auto">
+                    <div class="fw-semibold">@item.Title</div>
+                    <small class="text-muted">by @item.AuthorName</small>
+                </div>
+                <div class="d-flex gap-2 ms-2">
+                    <span class="badge bg-secondary rounded-pill align-self-center">@item.ActionCount prompts</span>
+                    <a asp-action="Edit" asp-route-id="@item.Id" class="btn btn-outline-secondary btn-sm">Edit</a>
+                    <a asp-action="Details" asp-route-id="@item.Id" class="btn btn-outline-primary btn-sm">Open</a>
+                </div>
+            </div>
+        }
+    </div>
+}

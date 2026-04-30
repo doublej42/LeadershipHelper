@@ -1,12 +1,18 @@
 @model LeadershipHelper.Web.Models.Situations.SituationInputModel
 @{
     var situationId = (Guid)ViewData["SituationId"]!;
-    ViewData["Title"] = "Edit situation";
+    var isOwner = (bool)(ViewData["IsOwner"] ?? false);
+    var situationTitle = ViewData["SituationTitle"] as string ?? string.Empty;
+    ViewData["Title"] = isOwner ? "Edit situation" : "Add prompts";
 }
 
 <div class="mb-4">
     <a asp-action="Details" asp-route-id="@situationId" class="text-muted small">&larr; Back to situation</a>
-    <h1 class="h3 mt-2">Edit situation</h1>
+    <h1 class="h3 mt-2">@(isOwner ? "Edit situation" : $"Add prompts to: {situationTitle}")</h1>
+    @if (!isOwner)
+    {
+        <p class="text-muted">You can add new prompts to this situation. Existing prompts cannot be changed.</p>
+    }
 </div>
 
 <form method="post" asp-action="Edit" asp-route-id="@situationId">
@@ -14,69 +20,103 @@
 
     <div asp-validation-summary="ModelOnly" class="alert alert-danger d-none" id="val-summary"></div>
 
-    <div class="card mb-3">
-        <div class="card-body">
-            <div class="mb-3">
-                <label asp-for="Title" class="form-label fw-semibold">Title</label>
-                <input asp-for="Title" class="form-control" />
-                <span asp-validation-for="Title" class="text-danger small"></span>
-            </div>
-            <div class="mb-3">
-                <label asp-for="ShortDescription" class="form-label fw-semibold">Short description</label>
-                <textarea asp-for="ShortDescription" class="form-control" rows="2"></textarea>
-                <span asp-validation-for="ShortDescription" class="text-danger small"></span>
-            </div>
-            <div class="mb-0">
-                <label asp-for="AuthorName" class="form-label fw-semibold">Author name <span class="text-muted fw-normal">(optional)</span></label>
-                <input asp-for="AuthorName" class="form-control" />
+    @if (isOwner)
+    {
+        <div class="card mb-3">
+            <div class="card-body">
+                <div class="mb-3">
+                    <label asp-for="Title" class="form-label fw-semibold">Title</label>
+                    <input asp-for="Title" class="form-control" />
+                    <span asp-validation-for="Title" class="text-danger small"></span>
+                </div>
+                <div class="mb-3">
+                    <label asp-for="ShortDescription" class="form-label fw-semibold">Short description</label>
+                    <textarea asp-for="ShortDescription" class="form-control" rows="2"></textarea>
+                    <span asp-validation-for="ShortDescription" class="text-danger small"></span>
+                </div>
+                <div class="mb-3">
+                    <label asp-for="AuthorName" class="form-label fw-semibold">Author name <span class="text-muted fw-normal">(optional)</span></label>
+                    <input asp-for="AuthorName" class="form-control" />
+                </div>
+                <div class="pt-2 border-top">
+                    <div class="form-check">
+                        <input asp-for="IsCommunity" class="form-check-input" type="checkbox" />
+                        <label asp-for="IsCommunity" class="form-check-label fw-semibold">Share with community</label>
+                        <div class="form-text">If checked, this situation will appear in the public browse list.</div>
+                    </div>
+                </div>
             </div>
         </div>
-    </div>
+    }
 
     <h5 class="fw-semibold mb-2">Prompts / actions</h5>
-    <p class="text-muted small mb-3">Edit existing prompts, remove them with ✕, or add new ones at the bottom.</p>
+    @if (isOwner)
+    {
+        <p class="text-muted small mb-3">Edit existing prompts, remove them with ✕, or add new ones at the bottom.</p>
+    }
 
     <div id="actions-list" class="list-group mb-3">
         @for (int i = 0; i < Model.Actions.Count; i++)
         {
             var a = Model.Actions[i];
-            <div class="list-group-item py-3 action-row">
+            <div class="list-group-item py-3 @(isOwner ? "action-row" : "")">
                 @if (a.Id.HasValue)
                 {
                     <input type="hidden" name="Actions[@i].Id" value="@a.Id" />
                 }
                 <div class="d-flex align-items-start gap-2">
-                    <span class="badge bg-secondary rounded-pill mt-2 step-badge">@(i + 1)</span>
+                    <span class="badge bg-secondary rounded-pill mt-2 @(isOwner ? "step-badge" : "")">@(i + 1)</span>
                     <div class="flex-grow-1">
-                        <textarea name="Actions[@i].PromptMarkdown" class="form-control mb-2"
-                                  rows="2">@a.PromptMarkdown</textarea>
-                        <div class="form-check">
-                            <input type="checkbox" name="Actions[@i].RequiresTextResponse" value="true"
-                                   class="form-check-input" id="req-@i"
-                                   @(a.RequiresTextResponse ? "checked" : "") />
-                            <input type="hidden" name="Actions[@i].RequiresTextResponse" value="false" />
-                            <label class="form-check-label small" for="req-@i">Requires written response</label>
-                        </div>
+                        @if (isOwner)
+                        {
+                            <textarea name="Actions[@i].PromptMarkdown" class="form-control mb-2" rows="2">@a.PromptMarkdown</textarea>
+                            <div class="form-check">
+                                <input type="checkbox" name="Actions[@i].RequiresTextResponse" value="true"
+                                       class="form-check-input" id="req-@i"
+                                       @(a.RequiresTextResponse ? "checked" : "") />
+                                <input type="hidden" name="Actions[@i].RequiresTextResponse" value="false" />
+                                <label class="form-check-label small" for="req-@i">Requires written response</label>
+                            </div>
+                        }
+                        else
+                        {
+                            <input type="hidden" name="Actions[@i].PromptMarkdown" value="@a.PromptMarkdown" />
+                            <input type="hidden" name="Actions[@i].RequiresTextResponse" value="@(a.RequiresTextResponse ? "true" : "false")" />
+                            <p class="mb-0">@a.PromptMarkdown</p>
+                            @if (a.RequiresTextResponse)
+                            {
+                                <small class="text-muted">Requires written response</small>
+                            }
+                        }
                     </div>
-                    <button type="button" class="btn btn-sm btn-outline-danger mt-1 remove-action">&#x2715;</button>
+                    @if (isOwner)
+                    {
+                        <button type="button" class="btn btn-sm btn-outline-danger mt-1 remove-action">&#x2715;</button>
+                    }
                 </div>
             </div>
         }
     </div>
 
+    <h6 class="fw-semibold mb-2 mt-2">Add new prompts</h6>
+    <div id="new-actions-list" class="list-group mb-3"></div>
     <button type="button" class="btn btn-outline-secondary btn-sm mb-4" id="add-action">+ Add prompt</button>
 
     <div class="d-flex gap-2">
-        <button type="submit" class="btn btn-primary">Save changes</button>
+        <button type="submit" class="btn btn-primary">@(isOwner ? "Save changes" : "Add prompts")</button>
         <a asp-action="Details" asp-route-id="@situationId" class="btn btn-outline-secondary">Cancel</a>
     </div>
 </form>
 
 @section Scripts {
 <script>
+    const isOwner = @(isOwner ? "true" : "false");
+    const existingCount = @Model.Actions.Count;
     const list = document.getElementById('actions-list');
+    const newList = document.getElementById('new-actions-list');
 
     function renumber() {
+        if (!isOwner) return;
         const rows = list.querySelectorAll('.action-row');
         rows.forEach((row, i) => {
             row.querySelector('.step-badge').textContent = i + 1;
@@ -91,31 +131,39 @@
     }
 
     document.getElementById('add-action').addEventListener('click', () => {
-        const i = list.querySelectorAll('.action-row').length;
+        const newIdx = existingCount + newList.querySelectorAll('.new-action-row').length;
+        const displayNum = (isOwner ? list.querySelectorAll('.action-row').length : existingCount) + newList.querySelectorAll('.new-action-row').length + 1;
         const div = document.createElement('div');
-        div.className = 'list-group-item py-3 action-row';
+        div.className = 'list-group-item py-3 new-action-row';
         div.innerHTML = `
             <div class="d-flex align-items-start gap-2">
-                <span class="badge bg-secondary rounded-pill mt-2 step-badge">${i + 1}</span>
+                <span class="badge bg-primary rounded-pill mt-2">${displayNum}</span>
                 <div class="flex-grow-1">
-                    <textarea name="Actions[${i}].PromptMarkdown" class="form-control mb-2" rows="2" placeholder="e.g. What have you already tried?"></textarea>
+                    <textarea name="Actions[${newIdx}].PromptMarkdown" class="form-control mb-2" rows="2" placeholder="e.g. What have you already tried?"></textarea>
                     <div class="form-check">
-                        <input type="checkbox" name="Actions[${i}].RequiresTextResponse" value="true" class="form-check-input" id="req-${i}" />
-                        <input type="hidden" name="Actions[${i}].RequiresTextResponse" value="false" />
-                        <label class="form-check-label small" for="req-${i}">Requires written response</label>
+                        <input type="checkbox" name="Actions[${newIdx}].RequiresTextResponse" value="true" class="form-check-input" id="req-n${newIdx}" />
+                        <input type="hidden" name="Actions[${newIdx}].RequiresTextResponse" value="false" />
+                        <label class="form-check-label small" for="req-n${newIdx}">Requires written response</label>
                     </div>
                 </div>
-                <button type="button" class="btn btn-sm btn-outline-danger mt-1 remove-action">&#x2715;</button>
+                <button type="button" class="btn btn-sm btn-outline-danger mt-1 remove-new">&#x2715;</button>
             </div>`;
-        list.appendChild(div);
+        newList.appendChild(div);
         div.querySelector('textarea').focus();
-        renumber();
     });
 
-    list.addEventListener('click', e => {
-        if (e.target.closest('.remove-action')) {
-            e.target.closest('.action-row').remove();
-            renumber();
+    if (isOwner) {
+        list.addEventListener('click', e => {
+            if (e.target.closest('.remove-action')) {
+                e.target.closest('.action-row').remove();
+                renumber();
+            }
+        });
+    }
+
+    newList.addEventListener('click', e => {
+        if (e.target.closest('.remove-new')) {
+            e.target.closest('.new-action-row').remove();
         }
     });
 

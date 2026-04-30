@@ -9,4 +9,6 @@ public sealed record SituationDetailsViewModel
     // Set by controller when user is authenticated
     public bool IsSaved { get; init; }
     public Guid? ActiveExperienceId { get; init; }
+    public bool CanEdit { get; init; }
+    public bool CanAddPrompts { get; init; }
 }
