@@ -35,8 +35,41 @@
                         <li class="nav-item">
                             <a class="nav-link text-dark" asp-area="" asp-controller="Situations" asp-action="Index">Browse Situations</a>
                         </li>
+                        @* Mobile-only: user items merged into the main menu *@
+                        @if (User.Identity?.IsAuthenticated == true)
+                        {
+                            <li class="nav-item d-sm-none"><hr class="my-1" /></li>
+                            <li class="nav-item d-sm-none">
+                                <span class="nav-link text-muted small fw-semibold">@User.Identity?.Name</span>
+                            </li>
+                            <li class="nav-item d-sm-none">
+                                <a class="nav-link text-dark" asp-controller="Situations" asp-action="Mine">My Situations</a>
+                            </li>
+                            <li class="nav-item d-sm-none">
+                                <a class="nav-link text-dark" asp-controller="Experiences" asp-action="Index">My Experiences</a>
+                            </li>
+                            <li class="nav-item d-sm-none">
+                                <a class="nav-link text-dark" asp-controller="Situations" asp-action="Saved">Saved Situations</a>
+                            </li>
+                            <li class="nav-item d-sm-none">
+                                <a class="nav-link text-dark" asp-controller="Account" asp-action="Index">Account</a>
+                            </li>
+                            <li class="nav-item d-sm-none">
+                                <form method="post" asp-controller="Auth" asp-action="Logout">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="btn btn-link nav-link text-danger p-0 ms-3">Sign out</button>
+                                </form>
+                            </li>
+                        }
+                        else
+                        {
+                            <li class="nav-item d-sm-none">
+                                <a class="nav-link text-dark" asp-controller="Auth" asp-action="Login">Sign in</a>
+                            </li>
+                        }
                     </ul>
-                    <ul class="navbar-nav align-items-center">
+                    @* Desktop-only: avatar dropdown / sign-in icon *@
+                    <ul class="navbar-nav align-items-center d-none d-sm-flex">
                         @if (User.Identity?.IsAuthenticated == true)
                         {
                                 var avatarName = User.Identity?.Name ?? "";
