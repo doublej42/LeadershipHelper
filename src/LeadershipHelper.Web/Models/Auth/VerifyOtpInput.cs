@@ -10,6 +10,4 @@ public sealed class VerifyOtpInput
     [Required]
     [RegularExpression("^\\d{6}$")]
     public string Code { get; set; } = string.Empty;
-
-    public string? DisplayName { get; set; }
 }

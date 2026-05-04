@@ -33,12 +33,23 @@
                            maxlength="6" class="form-control form-control-lg text-center tracking-widest"
                            autocomplete="one-time-code" required autofocus />
                 </div>
-                <div class="mb-3">
-                    <label for="display-name" class="form-label">Your name <span class="text-muted">(optional, first time only)</span></label>
-                    <input id="display-name" name="DisplayName" type="text" class="form-control" maxlength="100" />
-                </div>
-                <button type="submit" class="btn btn-primary w-100" id="btn-verify">Verify &amp; sign in</button>
+                <button type="submit" class="btn btn-primary w-100" id="btn-verify">Verify code</button>
                 <button type="button" class="btn btn-link w-100 mt-1" id="btn-back">Use a different email</button>
+            </form>
+        </div>
+
+        @* Step 3: first-time display name *@
+        <div id="step-name" class="d-none">
+            <p class="text-muted">Welcome! This looks like your first login. What name should we show in the app?</p>
+            <div class="alert alert-danger d-none" id="name-error"></div>
+            <form id="form-name" novalidate>
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="FirstLoginToken" id="first-login-token" />
+                <div class="mb-3">
+                    <label for="first-display-name" class="form-label">Your name</label>
+                    <input id="first-display-name" name="DisplayName" type="text" class="form-control" maxlength="100" required autofocus />
+                </div>
+                <button type="submit" class="btn btn-primary w-100" id="btn-complete-first-login">Complete sign in</button>
             </form>
         </div>
 
@@ -54,10 +65,11 @@
 (function () {
     const stepEmail = document.getElementById('step-email');
     const stepCode  = document.getElementById('step-code');
+    const stepName  = document.getElementById('step-name');
     const stepError = document.getElementById('step-error');
 
     function show(el) {
-        [stepEmail, stepCode, stepError].forEach(e => e.classList.add('d-none'));
+        [stepEmail, stepCode, stepName, stepError].forEach(e => e.classList.add('d-none'));
         el.classList.remove('d-none');
     }
 
@@ -131,7 +143,6 @@
         const body = new URLSearchParams({
             ChallengeId: document.getElementById('challenge-id').value,
             Code: codeInput.value.trim(),
-            DisplayName: document.getElementById('display-name').value.trim(),
         });
 
         try {
@@ -145,9 +156,17 @@
                 redirect: 'follow',
             });
 
-            // On success the controller returns 200 with a redirectUrl.
+            // Existing users receive redirectUrl; first-time users receive firstLoginToken.
             if (resp.ok) {
                 const data = await resp.json().catch(() => ({}));
+
+                if (data.requiresDisplayName && data.firstLoginToken) {
+                    document.getElementById('first-login-token').value = data.firstLoginToken;
+                    show(stepName);
+                    document.getElementById('first-display-name').focus();
+                    return;
+                }
+
                 window.location.href = data.redirectUrl ?? '/situations';
                 return;
             }
@@ -162,7 +181,62 @@
             show(stepError);
         } finally {
             btn.disabled = false;
-            btn.textContent = 'Verify & sign in';
+            btn.textContent = 'Verify code';
+        }
+    });
+
+    document.getElementById('form-name').addEventListener('submit', async function (e) {
+        e.preventDefault();
+
+        const nameInput = document.getElementById('first-display-name');
+        const nameError = document.getElementById('name-error');
+        const btn = document.getElementById('btn-complete-first-login');
+
+        nameError.classList.add('d-none');
+        nameError.textContent = '';
+
+        const displayName = nameInput.value.trim();
+        if (!displayName) {
+            nameError.textContent = 'Please enter your name.';
+            nameError.classList.remove('d-none');
+            nameInput.focus();
+            return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = 'Completing…';
+
+        const token = this.querySelector('input[name="__RequestVerificationToken"]').value;
+        const body = new URLSearchParams({
+            FirstLoginToken: document.getElementById('first-login-token').value,
+            DisplayName: displayName,
+        });
+
+        try {
+            const resp = await fetch('/auth/complete-first-login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'RequestVerificationToken': token,
+                },
+                body,
+            });
+
+            if (resp.ok) {
+                const data = await resp.json().catch(() => ({}));
+                window.location.href = data.redirectUrl ?? '/situations';
+                return;
+            }
+
+            const data = await resp.json().catch(() => ({}));
+            nameError.textContent = data?.message ?? 'Could not complete first-time sign in.';
+            nameError.classList.remove('d-none');
+        } catch (err) {
+            document.getElementById('error-message').textContent = err.message;
+            show(stepError);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Complete sign in';
         }
     });
 

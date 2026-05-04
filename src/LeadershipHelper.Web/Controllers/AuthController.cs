@@ -5,6 +5,7 @@ using LeadershipHelper.Infrastructure.Persistence;
 using LeadershipHelper.Web.Models.Auth;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -13,15 +14,23 @@ namespace LeadershipHelper.Web.Controllers;
 [Route("auth")]
 public sealed class AuthController : Controller
 {
+    private const string FirstLoginTokenPurpose = "LeadershipHelper.Auth.FirstLoginToken.v1";
+
     private readonly AppDbContext _dbContext;
     private readonly IOtpService _otpService;
     private readonly IEmailSender _emailSender;
+    private readonly IDataProtector _firstLoginTokenProtector;
 
-    public AuthController(AppDbContext dbContext, IOtpService otpService, IEmailSender emailSender)
+    public AuthController(
+        AppDbContext dbContext,
+        IOtpService otpService,
+        IEmailSender emailSender,
+        IDataProtectionProvider dataProtectionProvider)
     {
         _dbContext = dbContext;
         _otpService = otpService;
         _emailSender = emailSender;
+        _firstLoginTokenProtector = dataProtectionProvider.CreateProtector(FirstLoginTokenPurpose);
     }
 
     [HttpGet("login")]
@@ -89,18 +98,112 @@ public sealed class AuthController : Controller
 
         if (user is null)
         {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            return Ok(new
+            {
+                requiresDisplayName = true,
+                firstLoginToken = CreateFirstLoginToken(challenge.Contact),
+            });
+        }
+
+        await SignInUserAsync(user, cancellationToken);
+
+        return Ok(new { redirectUrl = Url.Action("Index", "Situations") });
+    }
+
+    [HttpPost("complete-first-login")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CompleteFirstLogin(CompleteFirstLoginInput input, CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+
+        if (!TryReadFirstLoginToken(input.FirstLoginToken, out var contact))
+        {
+            return Unauthorized(new { message = "First login token is invalid or expired." });
+        }
+
+        var trimmedDisplayName = input.DisplayName.Trim();
+        if (string.IsNullOrWhiteSpace(trimmedDisplayName))
+        {
+            return BadRequest(new { message = "Please enter your name." });
+        }
+
+        var user = await _dbContext.Users
+            .FirstOrDefaultAsync(x => x.Email == contact, cancellationToken);
+
+        if (user is null)
+        {
             user = new AppUser
             {
-                Email = challenge.Contact,
-                DisplayName = string.IsNullOrWhiteSpace(input.DisplayName) ? null : input.DisplayName.Trim(),
+                Email = contact,
+                DisplayName = trimmedDisplayName,
             };
             _dbContext.Users.Add(user);
         }
-        else if (string.IsNullOrWhiteSpace(user.DisplayName) && !string.IsNullOrWhiteSpace(input.DisplayName))
+        else if (string.IsNullOrWhiteSpace(user.DisplayName))
         {
-            user.DisplayName = input.DisplayName.Trim();
+            user.DisplayName = trimmedDisplayName;
         }
 
+        await SignInUserAsync(user, cancellationToken);
+
+        return Ok(new { redirectUrl = Url.Action("Index", "Situations") });
+    }
+
+    [HttpPost("logout")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Logout()
+    {
+        await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+        return RedirectToAction("Index", "Home");
+    }
+
+    private string CreateFirstLoginToken(string contact)
+    {
+        var expiresUnixSeconds = DateTimeOffset.UtcNow.AddMinutes(10).ToUnixTimeSeconds();
+        return _firstLoginTokenProtector.Protect($"{contact}\n{expiresUnixSeconds}");
+    }
+
+    private bool TryReadFirstLoginToken(string token, out string contact)
+    {
+        contact = string.Empty;
+
+        try
+        {
+            var payload = _firstLoginTokenProtector.Unprotect(token);
+            var separatorIndex = payload.LastIndexOf('\n');
+            if (separatorIndex <= 0)
+            {
+                return false;
+            }
+
+            var email = payload[..separatorIndex];
+            var expiry = payload[(separatorIndex + 1)..];
+
+            if (!long.TryParse(expiry, out var expiresUnixSeconds))
+            {
+                return false;
+            }
+
+            if (DateTimeOffset.UtcNow.ToUnixTimeSeconds() > expiresUnixSeconds)
+            {
+                return false;
+            }
+
+            contact = email;
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private async Task SignInUserAsync(AppUser user, CancellationToken cancellationToken)
+    {
         _dbContext.AuthSessions.Add(new AuthSession
         {
             UserId = user.Id,
@@ -125,15 +228,5 @@ public sealed class AuthController : Controller
                 ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30),
                 AllowRefresh = true,
             });
-
-        return Ok(new { redirectUrl = Url.Action("Index", "Situations") });
-    }
-
-    [HttpPost("logout")]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Logout()
-    {
-        await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-        return RedirectToAction("Index", "Home");
     }
 }
