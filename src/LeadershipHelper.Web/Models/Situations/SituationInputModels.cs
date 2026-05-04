@@ -28,4 +28,13 @@ public sealed class ActionInputModel
     public bool RequiresTextResponse { get; set; }
 
     public int SortOrder { get; set; }
+
+    /// <summary>Toggle set by non-owner contributors: true = submit for community approval, false = personal only.</summary>
+    public bool IsCommunity { get; set; } = true;
+
+    // ── Display-only (not submitted by the form) ──────────────────────────────
+    public string? ContributorName { get; set; }
+    public bool PendingApproval { get; set; }
+    /// <summary>True when the current user created this prompt and may edit its content.</summary>
+    public bool IsOwnedByCurrentUser { get; set; }
 }

@@ -14,6 +14,7 @@ public static class ApplicationBuilderExtensions
         await dbContext.Database.MigrateAsync(cancellationToken);
 
         var seedService = scope.ServiceProvider.GetRequiredService<SeedDataService>();
+        await seedService.EnsureSystemUserAsync(cancellationToken);
         await seedService.SeedFromLeadershipJourneyAsync(cancellationToken);
     }
 }

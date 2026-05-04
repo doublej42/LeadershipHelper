@@ -55,6 +55,9 @@ public sealed class AppDbContext : DbContext
         modelBuilder.Entity<SituationAction>(entity =>
         {
             entity.HasKey(x => x.Id);
+            entity.Property(x => x.IsCommunity).HasDefaultValue(true);
+            entity.Property(x => x.IsApproved).HasDefaultValue(true);
+            entity.Property(x => x.IsArchived).HasDefaultValue(false);
             entity.HasOne(x => x.Situation)
                 .WithMany(x => x.Actions)
                 .HasForeignKey(x => x.SituationId)

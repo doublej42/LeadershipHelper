@@ -55,10 +55,13 @@ public sealed class ExperiencesController : Controller
     {
         var userId = CurrentUserId;
 
-        // Fetch the situation and its actions
+        // Fetch the situation and its actions visible to this user:
+        // approved community + own personal (non-community), not archived
         var actions = await _dbContext.SituationActions
             .AsNoTracking()
-            .Where(x => x.SituationId == situationId)
+            .Where(x => x.SituationId == situationId &&
+                        !x.IsArchived &&
+                        ((x.IsCommunity && x.IsApproved) || x.CreatorUserId == userId))
             .OrderBy(x => x.SortOrder)
             .ToListAsync(cancellationToken);
 

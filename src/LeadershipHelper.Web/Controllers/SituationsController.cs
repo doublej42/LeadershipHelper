@@ -59,24 +59,69 @@ public sealed class SituationsController : Controller
     [HttpGet]
     public async Task<IActionResult> Details(Guid id, CancellationToken cancellationToken)
     {
-        var item = await _dbContext.Situations
-            .AsNoTracking()
-            .Where(x => x.Id == id)
-            .Select(x => new SituationDetailsViewModel
-            {
-                Id = x.Id,
-                Title = x.Title,
-                AuthorName = _dbContext.Users.Where(u => u.Id == x.CreatorUserId).Select(u => u.DisplayName).FirstOrDefault() ?? x.AuthorName ?? "Unknown",
-                Actions = x.Actions.OrderBy(a => a.SortOrder).Select(a => a.PromptMarkdown).ToList(),
-            })
-            .SingleOrDefaultAsync(cancellationToken);
+        var userId = TryGetUserId();
 
-        if (item is null)
+        var situation = await _dbContext.Situations
+            .AsNoTracking()
+            .Include(x => x.Actions)
+            .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+
+        if (situation is null)
         {
             return NotFound();
         }
 
-        var userId = TryGetUserId();
+        var isOwner = userId.HasValue && situation.CreatorUserId.HasValue && situation.CreatorUserId.Value == userId.Value;
+
+        // Filter actions by visibility for this viewer
+        var visibleActions = situation.Actions
+            .Where(a => !a.IsArchived && (
+                (a.IsCommunity && a.IsApproved) ||
+                (userId.HasValue && a.CreatorUserId == userId) ||
+                isOwner))
+            .OrderBy(a => a.SortOrder)
+            .ToList();
+
+        // Resolve contributor display names for actions added by non-owners
+        var contributorIds = visibleActions
+            .Where(a => a.CreatorUserId.HasValue && a.CreatorUserId != situation.CreatorUserId)
+            .Select(a => a.CreatorUserId!.Value)
+            .Distinct()
+            .ToList();
+
+        Dictionary<Guid, string> contributorNames = new();
+        if (contributorIds.Count > 0)
+        {
+            contributorNames = await _dbContext.Users
+                .AsNoTracking()
+                .Where(u => contributorIds.Contains(u.Id))
+                .ToDictionaryAsync(u => u.Id, u => u.DisplayName ?? "Unknown", cancellationToken);
+        }
+
+        var situationAuthorName = await _dbContext.Users
+            .AsNoTracking()
+            .Where(u => u.Id == situation.CreatorUserId)
+            .Select(u => u.DisplayName)
+            .FirstOrDefaultAsync(cancellationToken)
+            ?? situation.AuthorName ?? "Unknown";
+
+        var item = new SituationDetailsViewModel
+        {
+            Id = situation.Id,
+            Title = situation.Title,
+            AuthorName = situationAuthorName,
+            Actions = visibleActions.Select(a => new SituationActionViewModel
+            {
+                Id = a.Id,
+                PromptMarkdown = a.PromptMarkdown,
+                RequiresTextResponse = a.RequiresTextResponse,
+                ContributorName = a.CreatorUserId.HasValue && a.CreatorUserId != situation.CreatorUserId
+                    ? contributorNames.GetValueOrDefault(a.CreatorUserId.Value, "Unknown")
+                    : null,
+                PendingApproval = a.IsCommunity && !a.IsApproved,
+            }).ToList(),
+        };
+
         if (userId is not null)
         {
             var isSaved = await _dbContext.SavedSituations
@@ -88,18 +133,12 @@ public sealed class SituationsController : Controller
                 .Select(x => (Guid?)x.Id)
                 .FirstOrDefaultAsync(cancellationToken);
 
-            var creatorId = await _dbContext.Situations
-                .Where(x => x.Id == id)
-                .Select(x => x.CreatorUserId)
-                .FirstOrDefaultAsync(cancellationToken);
-
-            var isOwner = creatorId.HasValue && creatorId.Value == userId.Value;
             item = item with
             {
                 IsSaved = isSaved,
                 ActiveExperienceId = activeExperienceId,
                 CanEdit = isOwner,
-                CanAddPrompts = !isOwner,
+                CanAddActions = !isOwner,
             };
         }
 
@@ -269,21 +308,49 @@ public sealed class SituationsController : Controller
         var userId = TryGetUserId()!.Value;
         var isOwner = situation.CreatorUserId.HasValue && situation.CreatorUserId.Value == userId;
 
+        // Resolve contributor names for non-owner actions
+        var contributorIds = situation.Actions
+            .Where(a => a.CreatorUserId.HasValue && a.CreatorUserId != situation.CreatorUserId)
+            .Select(a => a.CreatorUserId!.Value)
+            .Distinct()
+            .ToList();
+
+        Dictionary<Guid, string> contributorNames = new();
+        if (contributorIds.Count > 0)
+        {
+            contributorNames = await _dbContext.Users
+                .AsNoTracking()
+                .Where(u => contributorIds.Contains(u.Id))
+                .ToDictionaryAsync(u => u.Id, u => u.DisplayName ?? "Unknown", cancellationToken);
+        }
+
+        // Owners see all non-archived actions; non-owners see only approved community + their own
+        var visibleActions = situation.Actions
+            .Where(a => !a.IsArchived && (
+                isOwner ||
+                (a.IsCommunity && a.IsApproved) ||
+                a.CreatorUserId == userId))
+            .OrderBy(a => a.SortOrder)
+            .ToList();
+
         var model = new SituationInputModel
         {
             Title = isOwner ? situation.Title : string.Empty,
             ShortDescription = isOwner ? situation.ShortDescription : string.Empty,
             IsCommunity = situation.IsCommunity,
-            Actions = situation.Actions
-                .OrderBy(a => a.SortOrder)
-                .Select(a => new ActionInputModel
-                {
-                    Id = a.Id,
-                    PromptMarkdown = a.PromptMarkdown,
-                    RequiresTextResponse = a.RequiresTextResponse,
-                    SortOrder = a.SortOrder,
-                })
-                .ToList(),
+            Actions = visibleActions.Select(a => new ActionInputModel
+            {
+                Id = a.Id,
+                PromptMarkdown = a.PromptMarkdown,
+                RequiresTextResponse = a.RequiresTextResponse,
+                SortOrder = a.SortOrder,
+                IsCommunity = a.IsCommunity,
+                PendingApproval = a.IsCommunity && !a.IsApproved,
+                ContributorName = a.CreatorUserId.HasValue && a.CreatorUserId != situation.CreatorUserId
+                    ? contributorNames.GetValueOrDefault(a.CreatorUserId.Value, "Unknown")
+                    : null,
+                IsOwnedByCurrentUser = a.CreatorUserId == userId,
+            }).ToList(),
         };
 
         ViewData["SituationId"] = id;
@@ -310,13 +377,11 @@ public sealed class SituationsController : Controller
 
         if (!isOwner && !ModelState.IsValid)
         {
-            // For non-owners only validate new prompts; strip other errors
+            // For non-owners only validate new actions; strip other errors
             ModelState.Clear();
         }
 
-        var submittedActions = input.Actions
-            .Where(a => !string.IsNullOrWhiteSpace(a.PromptMarkdown))
-            .ToList();
+
 
         if (isOwner)
         {
@@ -330,36 +395,6 @@ public sealed class SituationsController : Controller
             situation.Title = input.Title.Trim();
             situation.ShortDescription = input.ShortDescription.Trim();
             situation.IsCommunity = input.IsCommunity;
-     
-            var originalActionIds = situation.Actions.Select(x => x.Id).ToHashSet();
-            var existingById = situation.Actions.ToDictionary(x => x.Id);
-            var retainedExistingIds = new HashSet<Guid>();
-
-            // Rebuild owner ordering from submitted sequence.
-            for (int i = 0; i < submittedActions.Count; i++)
-            {
-                var a = submittedActions[i];
-                var nextOrder = i + 1;
-
-                if (a.Id.HasValue && existingById.TryGetValue(a.Id.Value, out var existing))
-                {
-                    retainedExistingIds.Add(existing.Id);
-                    existing.PromptMarkdown = a.PromptMarkdown.Trim();
-                    existing.RequiresTextResponse = a.RequiresTextResponse;
-                    existing.SortOrder = nextOrder;
-                }
-            }
-
-          
-            // Remove original actions that were omitted from submission.
-            var toRemove = situation.Actions
-                .Where(a => originalActionIds.Contains(a.Id) && !retainedExistingIds.Contains(a.Id))
-                .ToList();
-
-            foreach (var r in toRemove)
-            {
-                _dbContext.SituationActions.Remove(r);
-            }
 
             try
             {
@@ -374,12 +409,86 @@ public sealed class SituationsController : Controller
                 return View(input);
             }
         }
-    
-       
+
+        var originalActionIds = situation.Actions.Select(x => x.Id).ToHashSet();
+        var existingById = situation.Actions.ToDictionary(x => x.Id);
+        var retainedExistingIds = new HashSet<Guid>();
+
+        var submittedActions = input.Actions
+       .Where(a => !string.IsNullOrWhiteSpace(a.PromptMarkdown))
+       .ToList();
+
+        // Rebuild owner ordering from submitted sequence.
+        for (int i = 0; i < submittedActions.Count; i++)
+        {
+            var a = submittedActions[i];
+            var nextOrder = i + 1;
+
+            if (a.Id.HasValue && existingById.TryGetValue(a.Id.Value, out var existing))
+            {
+                retainedExistingIds.Add(existing.Id);
+                var trimmedPrompt = a.PromptMarkdown.Trim();
+                var promptChanged = !string.Equals(existing.PromptMarkdown, trimmedPrompt, StringComparison.Ordinal)
+                    || existing.RequiresTextResponse != a.RequiresTextResponse;
+
+                // Users can edit only actions they created.
+                if (existing.CreatorUserId == userId)
+                {
+                    var wasCommunity = existing.IsCommunity;
+                    existing.PromptMarkdown = trimmedPrompt;
+                    existing.RequiresTextResponse = a.RequiresTextResponse;
+
+                    if (isOwner)
+                    {
+                        // Situation owner actions are always community and approved.
+                        existing.IsCommunity = true;
+                        existing.IsApproved = true;
+                    }
+                    else
+                    {
+                        existing.IsCommunity = a.IsCommunity;
+                        var visibilityChanged = wasCommunity != existing.IsCommunity;
+
+                        if (existing.IsCommunity)
+                        {
+                            // Any contributor change to a community action requires owner approval again.
+                            existing.IsApproved = !(promptChanged || visibilityChanged) && existing.IsApproved;
+                        }
+                        else
+                        {
+                            // Personal actions are visible only to creator and do not need approval.
+                            existing.IsApproved = true;
+                        }
+                    }
+
+                    existing.SortOrder = nextOrder;
+                }
+            }
+        }
+
+        // Remove or archive original actions that were omitted from submission.
+        var toRemove = situation.Actions.Where(a => a.CreatorUserId == userId)
+            .Where(a => originalActionIds.Contains(a.Id) && !retainedExistingIds.Contains(a.Id))
+            .ToList();
+
+        foreach (var r in toRemove)
+        {
+            var hasStates = await _dbContext.ExperienceActionStates
+                .AnyAsync(x => x.SituationActionId == r.Id, cancellationToken);
+            if (hasStates)
+            {
+                r.IsArchived = true;
+            }
+            else
+            {
+                _dbContext.SituationActions.Remove(r);
+            }
+        }
+
 
         // Append new actions after existing ones.
         int order = situation.Actions.Count > 0 ? situation.Actions.Max(a => a.SortOrder) + 1 : 1;
-        
+
         var submittedNewActions = input.NewActions
             .Where(a => !string.IsNullOrWhiteSpace(a.PromptMarkdown))
             .ToList();
@@ -392,6 +501,11 @@ public sealed class SituationsController : Controller
                 PromptMarkdown = a.PromptMarkdown.Trim(),
                 RequiresTextResponse = a.RequiresTextResponse,
                 SortOrder = order++,
+                CreatorUserId = userId,
+                IsCommunity = isOwner || a.IsCommunity,
+                // Owner's own actions are always approved.
+                // Non-owner community actions need owner approval; non-community are personal (auto-approved).
+                IsApproved = isOwner || !a.IsCommunity,
             });
         }
 
@@ -401,7 +515,7 @@ public sealed class SituationsController : Controller
         }
         catch (DbUpdateConcurrencyException)
         {
-            ModelState.AddModelError(string.Empty, "Issues adding new prompts. This situation was likely updated by someone else. Please reload and try again.");
+            ModelState.AddModelError(string.Empty, "Issues adding new actions. This situation was likely updated by someone else. Please reload and try again.");
             ViewData["SituationId"] = id;
             ViewData["IsOwner"] = isOwner;
             ViewData["SituationTitle"] = situation.Title;
@@ -409,5 +523,52 @@ public sealed class SituationsController : Controller
         }
 
         return RedirectToAction(nameof(Details), new { id = situation.Id });
+    }
+
+    // POST /situations/{id}/actions/{actionId}/approve
+    [Authorize]
+    [HttpPost("situations/{id:guid}/actions/{actionId:guid}/approve")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ApproveAction(Guid id, Guid actionId, CancellationToken cancellationToken)
+    {
+        var userId = TryGetUserId()!.Value;
+
+        var situation = await _dbContext.Situations
+            .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+        if (situation is null) return NotFound();
+        if (!situation.CreatorUserId.HasValue || situation.CreatorUserId.Value != userId) return Forbid();
+
+        var action = await _dbContext.SituationActions
+            .SingleOrDefaultAsync(x => x.Id == actionId && x.SituationId == id, cancellationToken);
+        if (action is null) return NotFound();
+
+        action.IsApproved = true;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return RedirectToAction(nameof(Edit), new { id });
+    }
+
+    // POST /situations/{id}/actions/{actionId}/reject
+    [Authorize]
+    [HttpPost("situations/{id:guid}/actions/{actionId:guid}/reject")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RejectAction(Guid id, Guid actionId, CancellationToken cancellationToken)
+    {
+        var userId = TryGetUserId()!.Value;
+
+        var situation = await _dbContext.Situations
+            .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+        if (situation is null) return NotFound();
+        if (!situation.CreatorUserId.HasValue || situation.CreatorUserId.Value != userId) return Forbid();
+
+        var action = await _dbContext.SituationActions
+            .SingleOrDefaultAsync(x => x.Id == actionId && x.SituationId == id, cancellationToken);
+        if (action is null) return NotFound();
+
+        action.IsCommunity = false;
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return RedirectToAction(nameof(Edit), new { id });
     }
 }

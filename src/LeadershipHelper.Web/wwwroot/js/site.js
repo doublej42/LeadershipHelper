@@ -15,6 +15,7 @@ console.error("Service worker registration failed", error);
 (() => {
 const installButtons = [
 document.getElementById("installAppButton"),
+document.getElementById("installAppButtonMobile"),
 ].filter(Boolean);
 if (installButtons.length === 0) {
 return;

@@ -1,4 +1,4 @@
-const CACHE_VERSION = "leadership-helper-v1";
+const CACHE_VERSION = "leadership-helper-v2";
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const PAGE_CACHE = `${CACHE_VERSION}-pages`;
 const ASSET_CACHE = `${CACHE_VERSION}-assets`;
@@ -50,7 +50,9 @@ function isAnonymousNavigation(url) {
         return true;
     }
 
-    return path.startsWith("/situations/details");
+    // Situation details are frequently updated and can be personalized for the current user,
+    // so they should always come from the network instead of the navigation cache.
+    return false;
 }
 
 function isStaticAsset(request, url) {

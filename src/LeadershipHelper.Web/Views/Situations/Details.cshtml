@@ -12,9 +12,27 @@
 <div class="list-group mb-4">
 @for (int i = 0; i < Model.Actions.Count; i++)
 {
-    <div class="list-group-item d-flex justify-content-between align-items-start py-3">
-        <div class="me-auto">@Model.Actions[i]</div>
-        <span class="badge bg-secondary rounded-pill ms-2 align-self-center">@(i + 1)</span>
+    var action = Model.Actions[i];
+    <div class="list-group-item py-3">
+        <div class="d-flex justify-content-between align-items-start gap-2">
+            <div class="me-auto">
+                <div>@action.PromptMarkdown</div>
+                @if (action.ContributorName is not null || action.PendingApproval)
+                {
+                    <div class="mt-1 d-flex gap-2 align-items-center flex-wrap">
+                        @if (action.ContributorName is not null)
+                        {
+                            <small class="text-muted">added by @action.ContributorName</small>
+                        }
+                        @if (action.PendingApproval)
+                        {
+                            <span class="badge bg-warning text-dark">Pending approval</span>
+                        }
+                    </div>
+                }
+            </div>
+            <span class="badge bg-secondary rounded-pill align-self-center">@(i + 1)</span>
+        </div>
     </div>
 }
 </div>
@@ -26,9 +44,9 @@
         {
             <a asp-action="Edit" asp-route-id="@Model.Id" class="btn btn-outline-secondary btn-sm">&#9998; Edit situation</a>
         }
-        else if (Model.CanAddPrompts)
+        else if (Model.CanAddActions)
         {
-            <a asp-action="Edit" asp-route-id="@Model.Id" class="btn btn-outline-secondary btn-sm">+ Add prompts</a>
+            <a asp-action="Edit" asp-route-id="@Model.Id" class="btn btn-outline-secondary btn-sm">+ Add actions</a>
         }
         @if (Model.ActiveExperienceId.HasValue)
         {

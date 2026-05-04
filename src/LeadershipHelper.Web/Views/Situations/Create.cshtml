@@ -37,13 +37,13 @@
         </div>
     </div>
 
-    <h5 class="fw-semibold mb-2">Prompts / actions</h5>
-    <p class="text-muted small mb-3">These are the reflection prompts that guide someone through the situation. Drag to reorder — or just add them in order.</p>
+    <h5 class="fw-semibold mb-2">Actions</h5>
+    <p class="text-muted small mb-3">These are the reflection actions that guide someone through the situation. Drag to reorder or just add them in order.</p>
 
     <div id="actions-list" class="list-group mb-3">
         @for (int i = 0; i < Model.Actions.Count; i++)
         {
-            <div class="list-group-item py-3 action-row">
+            <div class="list-group-item py-3 action-row" draggable="true">
                 <div class="d-flex align-items-start gap-2">
                     <span class="badge bg-secondary rounded-pill mt-2 step-badge">@(i + 1)</span>
                     <div class="flex-grow-1">
@@ -63,7 +63,7 @@
         }
     </div>
 
-    <button type="button" class="btn btn-outline-secondary btn-sm mb-4" id="add-action">+ Add prompt</button>
+    <button type="button" class="btn btn-outline-secondary btn-sm mb-4" id="add-action">+ Add action</button>
 
     <div class="d-flex gap-2">
         <button type="submit" class="btn btn-primary">Create situation</button>
@@ -91,6 +91,7 @@
         const i = list.querySelectorAll('.action-row').length;
         const div = document.createElement('div');
         div.className = 'list-group-item py-3 action-row';
+        div.setAttribute('draggable', 'true');
         div.innerHTML = `
             <div class="d-flex align-items-start gap-2">
                 <span class="badge bg-secondary rounded-pill mt-2 step-badge">${i + 1}</span>
@@ -114,6 +115,46 @@
             e.target.closest('.action-row').remove();
             renumber();
         }
+    });
+
+    // HTML5 drag/drop reordering for action rows.
+    let draggingRow = null;
+
+    list.addEventListener('dragstart', e => {
+        const row = e.target.closest('.action-row');
+        if (!row) return;
+        draggingRow = row;
+        row.classList.add('opacity-50');
+        e.dataTransfer.effectAllowed = 'move';
+    });
+
+    list.addEventListener('dragend', () => {
+        if (draggingRow) {
+            draggingRow.classList.remove('opacity-50');
+            draggingRow = null;
+        }
+    });
+
+    list.addEventListener('dragover', e => {
+        if (!draggingRow) return;
+        e.preventDefault();
+
+        const target = e.target.closest('.action-row');
+        if (!target || target === draggingRow) return;
+
+        const rect = target.getBoundingClientRect();
+        const before = e.clientY < rect.top + rect.height / 2;
+        if (before) {
+            list.insertBefore(draggingRow, target);
+        } else {
+            list.insertBefore(draggingRow, target.nextSibling);
+        }
+    });
+
+    list.addEventListener('drop', e => {
+        if (!draggingRow) return;
+        e.preventDefault();
+        renumber();
     });
 
     // Show validation summary if it has content

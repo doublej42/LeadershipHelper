@@ -1,7 +1,7 @@
 {
   "name": "Leadership Helper",
   "short_name": "Leadership",
-  "description": "Leadership situations and practice prompts you can use on the go.",
+  "description": "Leadership situations and practice actions you can use on the go.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
