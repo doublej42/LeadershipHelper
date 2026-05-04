@@ -4,6 +4,7 @@ obj/
 *.user
 *.suo
 TestResults/
+data/*
 
 # local secrets and environment files
 *.env
