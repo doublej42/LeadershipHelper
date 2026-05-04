@@ -10,9 +10,6 @@ public sealed class SituationInputModel
     [Required, MaxLength(1000)]
     public string ShortDescription { get; set; } = string.Empty;
 
-    [MaxLength(100)]
-    public string? AuthorName { get; set; }
-
     public bool IsCommunity { get; set; }
 
     public List<ActionInputModel> Actions { get; set; } = new();

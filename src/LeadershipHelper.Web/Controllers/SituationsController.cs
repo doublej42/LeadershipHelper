@@ -36,7 +36,8 @@ public sealed class SituationsController : Controller
         if (!string.IsNullOrWhiteSpace(q))
         {
             var term = q.Trim();
-            query = query.Where(x => x.Title.Contains(term) || (x.AuthorName ?? string.Empty).Contains(term));
+            query = query.Where(x => x.Title.Contains(term) ||
+                (_dbContext.Users.Where(u => u.Id == x.CreatorUserId).Select(u => u.DisplayName).FirstOrDefault() ?? x.AuthorName ?? string.Empty).Contains(term));
         }
 
         var items = await query
@@ -45,7 +46,7 @@ public sealed class SituationsController : Controller
             {
                 Id = x.Id,
                 Title = x.Title,
-                AuthorName = x.AuthorName ?? "Unknown",
+                AuthorName = _dbContext.Users.Where(u => u.Id == x.CreatorUserId).Select(u => u.DisplayName).FirstOrDefault() ?? x.AuthorName ?? "Unknown",
                 ActionCount = x.Actions.Count,
             })
             .ToListAsync(cancellationToken);
@@ -65,7 +66,7 @@ public sealed class SituationsController : Controller
             {
                 Id = x.Id,
                 Title = x.Title,
-                AuthorName = x.AuthorName ?? "Unknown",
+                AuthorName = _dbContext.Users.Where(u => u.Id == x.CreatorUserId).Select(u => u.DisplayName).FirstOrDefault() ?? x.AuthorName ?? "Unknown",
                 Actions = x.Actions.OrderBy(a => a.SortOrder).Select(a => a.PromptMarkdown).ToList(),
             })
             .SingleOrDefaultAsync(cancellationToken);
@@ -170,7 +171,7 @@ public sealed class SituationsController : Controller
             {
                 Id = x.Id,
                 Title = x.Title,
-                AuthorName = x.AuthorName ?? "Unknown",
+                AuthorName = _dbContext.Users.Where(u => u.Id == x.CreatorUserId).Select(u => u.DisplayName).FirstOrDefault() ?? x.AuthorName ?? "Unknown",
                 ActionCount = x.Actions.Count,
             })
             .ToListAsync(cancellationToken);
@@ -200,7 +201,7 @@ public sealed class SituationsController : Controller
             {
                 Id = x.Id,
                 Title = x.Title,
-                AuthorName = x.AuthorName ?? "Unknown",
+                AuthorName = _dbContext.Users.Where(u => u.Id == x.CreatorUserId).Select(u => u.DisplayName).FirstOrDefault() ?? x.AuthorName ?? "Unknown",
                 ActionCount = x.Actions.Count,
             })
             .ToListAsync(cancellationToken);
@@ -213,13 +214,7 @@ public sealed class SituationsController : Controller
     [HttpGet("situations/create")]
     public IActionResult Create()
     {
-        var userId = TryGetUserId()!.Value;
-        var displayName = _dbContext.Users
-            .Where(x => x.Id == userId)
-            .Select(x => x.DisplayName)
-            .FirstOrDefault();
-
-        var model = new SituationInputModel { AuthorName = displayName };
+        var model = new SituationInputModel();
         model.Actions.Add(new ActionInputModel { SortOrder = 1 });
         return View(model);
     }
@@ -238,7 +233,6 @@ public sealed class SituationsController : Controller
         {
             Title = input.Title.Trim(),
             ShortDescription = input.ShortDescription.Trim(),
-            AuthorName = string.IsNullOrWhiteSpace(input.AuthorName) ? null : input.AuthorName.Trim(),
             IsCommunity = input.IsCommunity,
             CreatorUserId = userId,
         };
@@ -279,7 +273,6 @@ public sealed class SituationsController : Controller
         {
             Title = isOwner ? situation.Title : string.Empty,
             ShortDescription = isOwner ? situation.ShortDescription : string.Empty,
-            AuthorName = isOwner ? situation.AuthorName : null,
             IsCommunity = situation.IsCommunity,
             Actions = situation.Actions
                 .OrderBy(a => a.SortOrder)
@@ -321,12 +314,7 @@ public sealed class SituationsController : Controller
             ModelState.Clear();
         }
 
-
         var submittedActions = input.Actions
-            .Where(a => !string.IsNullOrWhiteSpace(a.PromptMarkdown))
-            .ToList();
-
-        var submittedNewActions = input.NewActions
             .Where(a => !string.IsNullOrWhiteSpace(a.PromptMarkdown))
             .ToList();
 
@@ -341,7 +329,6 @@ public sealed class SituationsController : Controller
             }
             situation.Title = input.Title.Trim();
             situation.ShortDescription = input.ShortDescription.Trim();
-            situation.AuthorName = string.IsNullOrWhiteSpace(input.AuthorName) ? null : input.AuthorName.Trim();
             situation.IsCommunity = input.IsCommunity;
      
             var originalActionIds = situation.Actions.Select(x => x.Id).ToHashSet();
@@ -392,6 +379,11 @@ public sealed class SituationsController : Controller
 
         // Append new actions after existing ones.
         int order = situation.Actions.Count > 0 ? situation.Actions.Max(a => a.SortOrder) + 1 : 1;
+        
+        var submittedNewActions = input.NewActions
+            .Where(a => !string.IsNullOrWhiteSpace(a.PromptMarkdown))
+            .ToList();
+
         foreach (var a in submittedNewActions)
         {
             _dbContext.SituationActions.Add(new SituationAction
@@ -415,8 +407,6 @@ public sealed class SituationsController : Controller
             ViewData["SituationTitle"] = situation.Title;
             return View(input);
         }
-
-        
 
         return RedirectToAction(nameof(Details), new { id = situation.Id });
     }
