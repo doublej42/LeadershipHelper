@@ -3,8 +3,16 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0f5132" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Leadership Helper" />
     <title>@ViewData["Title"] - Leadership Helper</title>
     <script type="importmap"></script>
+    <link rel="icon" type="image/png" href="~/icons/icon-192.png" />
+    <link rel="manifest" href="~/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="~/icons/apple-touch-icon.png" />
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/LeadershipHelper.Web.styles.css" asp-append-version="true" />
@@ -54,6 +62,11 @@
                         }
                         else
                         {
+                            <li class="nav-item me-2 d-flex align-items-center">
+                                <button id="installAppButton" class="btn btn-success btn-sm my-1 d-none" type="button" aria-label="Install app">
+                                    Install App
+                                </button>
+                            </li>
                             <li class="nav-item">
                                 <a class="btn btn-outline-primary btn-sm my-1" asp-controller="Auth" asp-action="Login">Sign in</a>
                             </li>

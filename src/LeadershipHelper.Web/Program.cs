@@ -29,6 +29,19 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.Equals("/service-worker.js", StringComparison.OrdinalIgnoreCase))
+    {
+        context.Response.Headers.CacheControl = "no-cache, no-store, must-revalidate";
+        context.Response.Headers.Pragma = "no-cache";
+        context.Response.Headers.Expires = "0";
+    }
+
+    await next();
+});
+
 app.UseRouting();
 
 app.UseAuthentication();
