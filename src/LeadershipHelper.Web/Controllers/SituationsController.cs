@@ -5,6 +5,7 @@ using LeadershipHelper.Web.Models.Situations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Update;
 
 namespace LeadershipHelper.Web.Controllers;
 
@@ -320,6 +321,15 @@ public sealed class SituationsController : Controller
             ModelState.Clear();
         }
 
+
+        var submittedActions = input.Actions
+            .Where(a => !string.IsNullOrWhiteSpace(a.PromptMarkdown))
+            .ToList();
+
+        var submittedNewActions = input.NewActions
+            .Where(a => !string.IsNullOrWhiteSpace(a.PromptMarkdown))
+            .ToList();
+
         if (isOwner)
         {
             if (!ModelState.IsValid)
@@ -333,47 +343,80 @@ public sealed class SituationsController : Controller
             situation.ShortDescription = input.ShortDescription.Trim();
             situation.AuthorName = string.IsNullOrWhiteSpace(input.AuthorName) ? null : input.AuthorName.Trim();
             situation.IsCommunity = input.IsCommunity;
-        }
+     
+            var originalActionIds = situation.Actions.Select(x => x.Id).ToHashSet();
+            var existingById = situation.Actions.ToDictionary(x => x.Id);
+            var retainedExistingIds = new HashSet<Guid>();
 
-        var submittedActions = input.Actions
-            .Where(a => !string.IsNullOrWhiteSpace(a.PromptMarkdown))
-            .ToList();
-
-        if (isOwner)
-        {
-            // Remove actions not present in submission
-            var submittedIds = submittedActions.Where(a => a.Id.HasValue).Select(a => a.Id!.Value).ToHashSet();
-            var toRemove = situation.Actions.Where(a => !submittedIds.Contains(a.Id)).ToList();
-            foreach (var r in toRemove)
-                _dbContext.SituationActions.Remove(r);
-        }
-
-        int order = situation.Actions.Count > 0 ? situation.Actions.Max(a => a.SortOrder) + 1 : 1;
-        foreach (var a in submittedActions)
-        {
-            if (isOwner && a.Id.HasValue)
+            // Rebuild owner ordering from submitted sequence.
+            for (int i = 0; i < submittedActions.Count; i++)
             {
-                var existing = situation.Actions.SingleOrDefault(x => x.Id == a.Id.Value);
-                if (existing is not null)
+                var a = submittedActions[i];
+                var nextOrder = i + 1;
+
+                if (a.Id.HasValue && existingById.TryGetValue(a.Id.Value, out var existing))
                 {
+                    retainedExistingIds.Add(existing.Id);
                     existing.PromptMarkdown = a.PromptMarkdown.Trim();
                     existing.RequiresTextResponse = a.RequiresTextResponse;
-                    existing.SortOrder = a.SortOrder;
+                    existing.SortOrder = nextOrder;
                 }
             }
-            else if (!a.Id.HasValue)
+
+          
+            // Remove original actions that were omitted from submission.
+            var toRemove = situation.Actions
+                .Where(a => originalActionIds.Contains(a.Id) && !retainedExistingIds.Contains(a.Id))
+                .ToList();
+
+            foreach (var r in toRemove)
             {
-                situation.Actions.Add(new SituationAction
-                {
-                    PromptMarkdown = a.PromptMarkdown.Trim(),
-                    RequiresTextResponse = a.RequiresTextResponse,
-                    SortOrder = order,
-                });
-                order++;
+                _dbContext.SituationActions.Remove(r);
+            }
+
+            try
+            {
+                await _dbContext.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                ModelState.AddModelError(string.Empty, "This situation was updated by someone else. Please reload and try again.");
+                ViewData["SituationId"] = id;
+                ViewData["IsOwner"] = isOwner;
+                ViewData["SituationTitle"] = situation.Title;
+                return View(input);
             }
         }
+    
+       
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        // Append new actions after existing ones.
+        int order = situation.Actions.Count > 0 ? situation.Actions.Max(a => a.SortOrder) + 1 : 1;
+        foreach (var a in submittedNewActions)
+        {
+            _dbContext.SituationActions.Add(new SituationAction
+            {
+                SituationId = situation.Id,
+                PromptMarkdown = a.PromptMarkdown.Trim(),
+                RequiresTextResponse = a.RequiresTextResponse,
+                SortOrder = order++,
+            });
+        }
+
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            ModelState.AddModelError(string.Empty, "Issues adding new prompts. This situation was likely updated by someone else. Please reload and try again.");
+            ViewData["SituationId"] = id;
+            ViewData["IsOwner"] = isOwner;
+            ViewData["SituationTitle"] = situation.Title;
+            return View(input);
+        }
+
+        
 
         return RedirectToAction(nameof(Details), new { id = situation.Id });
     }

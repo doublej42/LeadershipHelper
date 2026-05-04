@@ -80,8 +80,6 @@
                         }
                         else
                         {
-                            <input type="hidden" name="Actions[@i].PromptMarkdown" value="@a.PromptMarkdown" />
-                            <input type="hidden" name="Actions[@i].RequiresTextResponse" value="@(a.RequiresTextResponse ? "true" : "false")" />
                             <p class="mb-0">@a.PromptMarkdown</p>
                             @if (a.RequiresTextResponse)
                             {
@@ -131,18 +129,18 @@
     }
 
     document.getElementById('add-action').addEventListener('click', () => {
-        const newIdx = existingCount + newList.querySelectorAll('.new-action-row').length;
-        const displayNum = (isOwner ? list.querySelectorAll('.action-row').length : existingCount) + newList.querySelectorAll('.new-action-row').length + 1;
+        const newIdx = newList.querySelectorAll('.new-action-row').length;
+        const displayNum = (isOwner ? list.querySelectorAll('.action-row').length : existingCount) + newIdx + 1;
         const div = document.createElement('div');
         div.className = 'list-group-item py-3 new-action-row';
         div.innerHTML = `
             <div class="d-flex align-items-start gap-2">
                 <span class="badge bg-primary rounded-pill mt-2">${displayNum}</span>
                 <div class="flex-grow-1">
-                    <textarea name="Actions[${newIdx}].PromptMarkdown" class="form-control mb-2" rows="2" placeholder="e.g. What have you already tried?"></textarea>
+                    <textarea name="NewActions[${newIdx}].PromptMarkdown" class="form-control mb-2" rows="2" placeholder="e.g. What have you already tried?"></textarea>
                     <div class="form-check">
-                        <input type="checkbox" name="Actions[${newIdx}].RequiresTextResponse" value="true" class="form-check-input" id="req-n${newIdx}" />
-                        <input type="hidden" name="Actions[${newIdx}].RequiresTextResponse" value="false" />
+                        <input type="checkbox" name="NewActions[${newIdx}].RequiresTextResponse" value="true" class="form-check-input" id="req-n${newIdx}" />
+                        <input type="hidden" name="NewActions[${newIdx}].RequiresTextResponse" value="false" />
                         <label class="form-check-label small" for="req-n${newIdx}">Requires written response</label>
                     </div>
                 </div>
@@ -166,6 +164,21 @@
             e.target.closest('.new-action-row').remove();
         }
     });
+
+    const form = document.querySelector('form[method="post"]');
+    const submitButton = form?.querySelector('button[type="submit"]');
+    if (form && submitButton) {
+        form.addEventListener('submit', e => {
+            if (submitButton.dataset.submitting === 'true') {
+                e.preventDefault();
+                return;
+            }
+
+            submitButton.dataset.submitting = 'true';
+            submitButton.disabled = true;
+            submitButton.textContent = isOwner ? 'Saving changes...' : 'Adding prompts...';
+        });
+    }
 
     const vs = document.getElementById('val-summary');
     if (vs && vs.querySelectorAll('li').length) vs.classList.remove('d-none');

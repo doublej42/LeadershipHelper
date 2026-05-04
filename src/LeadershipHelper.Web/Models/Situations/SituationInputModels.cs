@@ -16,6 +16,9 @@ public sealed class SituationInputModel
     public bool IsCommunity { get; set; }
 
     public List<ActionInputModel> Actions { get; set; } = new();
+
+    /// <summary>New actions submitted from the edit form (never carry an Id).</summary>
+    public List<ActionInputModel> NewActions { get; set; } = new();
 }
 
 public sealed class ActionInputModel
