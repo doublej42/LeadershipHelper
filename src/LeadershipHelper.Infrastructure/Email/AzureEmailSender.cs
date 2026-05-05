@@ -30,4 +30,21 @@ public sealed class AzureEmailSender : IEmailSender
 
         await _client.SendAsync(WaitUntil.Started, message, cancellationToken);
     }
+
+    public async Task SendActionPendingApprovalAsync(string toAddress, string ownerName, string situationTitle, string editUrl, CancellationToken cancellationToken = default)
+    {
+        var subject = $"New action pending approval — {situationTitle}";
+        var message = new EmailMessage(
+            senderAddress: _fromAddress,
+            recipients: new EmailRecipients([new EmailAddress(toAddress)]),
+            content: new EmailContent(subject)
+            {
+                PlainText = $"Hi {ownerName},\n\nA contributor has added a new action to your situation \"{situationTitle}\" that is waiting for your review.\n\nReview it here: {editUrl}",
+                Html = $"<p>Hi {System.Net.WebUtility.HtmlEncode(ownerName)},</p>" +
+                       $"<p>A contributor has added a new action to your situation <strong>{System.Net.WebUtility.HtmlEncode(situationTitle)}</strong> that is waiting for your review.</p>" +
+                       $"<p><a href=\"{editUrl}\">Review pending actions</a></p>",
+            });
+
+        await _client.SendAsync(WaitUntil.Started, message, cancellationToken);
+    }
 }

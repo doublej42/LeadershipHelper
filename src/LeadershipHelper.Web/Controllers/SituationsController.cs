@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using LeadershipHelper.Application.Auth;
 using LeadershipHelper.Domain.Entities;
 using LeadershipHelper.Infrastructure.Persistence;
 using LeadershipHelper.Web.Models.Situations;
@@ -12,10 +13,12 @@ namespace LeadershipHelper.Web.Controllers;
 public sealed class SituationsController : Controller
 {
     private readonly AppDbContext _dbContext;
+    private readonly IEmailSender _emailSender;
 
-    public SituationsController(AppDbContext dbContext)
+    public SituationsController(AppDbContext dbContext, IEmailSender emailSender)
     {
         _dbContext = dbContext;
+        _emailSender = emailSender;
     }
 
     private Guid? TryGetUserId()
@@ -284,6 +287,9 @@ public sealed class SituationsController : Controller
                 PromptMarkdown = a.PromptMarkdown.Trim(),
                 RequiresTextResponse = a.RequiresTextResponse,
                 SortOrder = order++,
+                CreatorUserId = userId,
+                IsCommunity = true,
+                IsApproved = true,
             });
         }
 
@@ -507,6 +513,28 @@ public sealed class SituationsController : Controller
                 // Non-owner community actions need owner approval; non-community are personal (auto-approved).
                 IsApproved = isOwner || !a.IsCommunity,
             });
+
+}
+
+        // For non-owner community actions: email the situation owner to review.
+        if (!isOwner && submittedNewActions.Any(a => a.IsCommunity))
+        {
+            var owner = await _dbContext.Users
+                .AsNoTracking()
+                .Where(u => u.Id == situation.CreatorUserId)
+                .Select(u => new { u.Email, u.DisplayName })
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (owner?.Email is not null)
+            {
+                var editUrl = Url.Action(nameof(Edit), "Situations", new { id = situation.Id }, Request.Scheme, Request.Host.Value)!;
+                await _emailSender.SendActionPendingApprovalAsync(
+                    owner.Email,
+                    owner.DisplayName ?? "there",
+                    situation.Title,
+                    editUrl,
+                    cancellationToken);
+            }
         }
 
         try

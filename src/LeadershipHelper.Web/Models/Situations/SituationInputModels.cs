@@ -22,7 +22,6 @@ public sealed class ActionInputModel
 {
     public Guid? Id { get; set; }
 
-    [Required]
     public string PromptMarkdown { get; set; } = string.Empty;
 
     public bool RequiresTextResponse { get; set; }
